@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { and, eq } from "drizzle-orm";
-import { projects, workspaces, type Db } from "@cohort/db";
+import type { Db } from "@cohort/db";
 import {
   blob,
   branches,
@@ -12,6 +11,7 @@ import {
   tree,
 } from "../git/repo.ts";
 import { requireUser } from "../http.ts";
+import { findProject } from "../projects.ts";
 import { projectToApi } from "./workspaces.ts";
 
 interface Params {
@@ -33,18 +33,13 @@ export async function repoRoutes(app: FastifyInstance, { db, reposRoot }: { db: 
 
   async function load(request: Req, reply: FastifyReply) {
     const { workspace, project } = request.params;
-    const row = db
-      .select({ project: projects })
-      .from(projects)
-      .innerJoin(workspaces, eq(workspaces.id, projects.workspaceId))
-      .where(and(eq(workspaces.slug, workspace), eq(projects.slug, project)))
-      .get();
+    const row = findProject(db, workspace, project);
     if (!row) {
       reply.code(404).send({ error: "Project not found" });
       return null;
     }
     const gitDir = repoDir(reposRoot, workspace, project);
-    return { gitDir, project: await projectToApi(reposRoot, workspace, row.project) };
+    return { gitDir, project: await projectToApi(reposRoot, workspace, row) };
   }
 
   // Resolves ?ref= (default branch when omitted) and ?path=, replying 404/400 on failure.

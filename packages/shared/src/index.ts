@@ -166,3 +166,91 @@ export interface CommitDetail extends Commit {
   body: string;
   files: FileDiff[];
 }
+
+// Issues
+
+export const ISSUE_STATUSES = ["todo", "in_progress", "review", "done", "blocked"] as const;
+export type IssueStatus = (typeof ISSUE_STATUSES)[number];
+
+export const STATUS_LABELS: Record<IssueStatus, string> = {
+  todo: "To do",
+  in_progress: "In progress",
+  review: "In review",
+  done: "Done",
+  blocked: "Blocked",
+};
+
+const issueNumber = z.number().int().positive();
+const labelName = z.string().trim().min(1).max(50);
+
+export const createIssueBody = z.object({
+  title: z.string().trim().min(1, "Title is required").max(255),
+  body: z.string().max(100_000).default(""),
+  status: z.enum(ISSUE_STATUSES).default("todo"),
+  labels: z.array(labelName).max(20).default([]),
+  parent: issueNumber.nullable().default(null),
+  dependsOn: z.array(issueNumber).max(50).default([]),
+  assignee: z.string().nullable().default(null),
+});
+export type CreateIssueBody = z.input<typeof createIssueBody>;
+
+// Every field optional; only the ones sent are changed.
+export const updateIssueBody = z.object({
+  title: z.string().trim().min(1, "Title is required").max(255).optional(),
+  body: z.string().max(100_000).optional(),
+  status: z.enum(ISSUE_STATUSES).optional(),
+  labels: z.array(labelName).max(20).optional(),
+  parent: issueNumber.nullable().optional(),
+  dependsOn: z.array(issueNumber).max(50).optional(),
+  assignee: z.string().nullable().optional(),
+});
+export type UpdateIssueBody = z.input<typeof updateIssueBody>;
+
+export const createCommentBody = z.object({
+  body: z.string().trim().min(1, "Comment can't be empty").max(100_000),
+});
+
+export interface Label {
+  id: number;
+  name: string;
+  color: string;
+}
+
+export interface IssueRef {
+  number: number;
+  title: string;
+  status: IssueStatus;
+}
+
+export interface IssueSummary extends IssueRef {
+  id: number;
+  // "<workspace>/<project>", for lists that span projects.
+  project: string;
+  labels: Label[];
+  assignee: User | null;
+  parent: number | null;
+  // Dependencies that aren't done yet.
+  waitingOn: number;
+  children: number;
+  comments: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IssueComment {
+  id: number;
+  author: User;
+  body: string;
+  createdAt: string;
+}
+
+export interface IssueDetail extends IssueSummary {
+  body: string;
+  author: User;
+  parentIssue: IssueRef | null;
+  childIssues: IssueRef[];
+  dependsOn: IssueRef[];
+  // Issues that wait on this one.
+  blocks: IssueRef[];
+  commentList: IssueComment[];
+}

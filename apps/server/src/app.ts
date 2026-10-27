@@ -9,6 +9,7 @@ import { authRoutes } from "./routes/auth.ts";
 import { tokenRoutes } from "./routes/tokens.ts";
 import { workspaceRoutes } from "./routes/workspaces.ts";
 import { repoRoutes } from "./routes/repos.ts";
+import { issueRoutes } from "./routes/issues.ts";
 import { gitHttpRoutes } from "./git/http.ts";
 
 declare module "fastify" {
@@ -58,6 +59,7 @@ export async function buildApp({ db, reposRoot, webDist, allowedHosts = [], logg
   await app.register(tokenRoutes, { db });
   await app.register(workspaceRoutes, { db, reposRoot });
   await app.register(repoRoutes, { db, reposRoot });
+  await app.register(issueRoutes, { db });
   await app.register(gitHttpRoutes, { db, reposRoot });
 
   const serveWeb = webDist !== undefined && existsSync(webDist);

@@ -12,6 +12,9 @@ import { BlobView } from "./pages/project/BlobView.tsx";
 import { CommitsView } from "./pages/project/CommitsView.tsx";
 import { CommitView } from "./pages/project/CommitView.tsx";
 import { BranchesView } from "./pages/project/BranchesView.tsx";
+import { IssuesView } from "./pages/project/IssuesView.tsx";
+import { NewIssueView } from "./pages/project/NewIssueView.tsx";
+import { IssueView } from "./pages/project/IssueView.tsx";
 
 export function App() {
   const { status, error } = useSession();
@@ -58,6 +61,9 @@ export function App() {
           <Route path="commits" element={<CommitsView />} />
           <Route path="commit/:sha" element={<CommitView />} />
           <Route path="branches" element={<BranchesView />} />
+          <Route path="issues" element={<IssuesView />} />
+          <Route path="issues/new" element={<NewIssueView />} />
+          <Route path="issues/:number" element={<IssueView />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
