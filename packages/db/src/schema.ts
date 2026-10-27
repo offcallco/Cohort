@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const createdAt = () =>
   integer("created_at", { mode: "timestamp_ms" })
@@ -36,3 +36,27 @@ export const accessTokens = sqliteTable("access_tokens", {
   createdAt: createdAt(),
   lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
 });
+
+export const workspaces = sqliteTable("workspaces", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  createdAt: createdAt(),
+});
+
+// A project is one git repo, stored at <repos>/<workspace slug>/<project slug>.git.
+export const projects = sqliteTable(
+  "projects",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    workspaceId: integer("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("projects_workspace_slug").on(t.workspaceId, t.slug)],
+);
