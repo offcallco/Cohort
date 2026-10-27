@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { and, eq } from "drizzle-orm";
-import { projects, workspaces, type Db } from "@cohort/db";
+import type { Db } from "@cohort/db";
 import { userForAccessToken } from "../auth.ts";
+import { findProject } from "../projects.ts";
 
 // Git smart HTTP (clone, fetch, push), delegated to `git http-backend` as a CGI program.
 // Auth is an access token, sent as the password (any username) or as a Bearer token.
@@ -49,13 +49,7 @@ export async function gitHttpRoutes(
 
     const { workspace } = request.params;
     const project = request.params.repo.replace(/\.git$/, "");
-    const found = db
-      .select({ id: projects.id })
-      .from(projects)
-      .innerJoin(workspaces, eq(workspaces.id, projects.workspaceId))
-      .where(and(eq(workspaces.slug, workspace), eq(projects.slug, project)))
-      .get();
-    if (!found) return reply.code(404).type("text/plain").send("Repository not found.\n");
+    if (!findProject(db, workspace, project)) return reply.code(404).type("text/plain").send("Repository not found.\n");
 
     const query = request.url.includes("?") ? request.url.slice(request.url.indexOf("?") + 1) : "";
     if (rest === "info/refs") {

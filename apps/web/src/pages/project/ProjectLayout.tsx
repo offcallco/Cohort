@@ -39,15 +39,18 @@ export function ProjectLayout() {
         </div>
         <CloneBox path={project.clonePath} />
       </div>
-      {project.defaultBranch && (
-        <nav className="tabs">
-          <NavLink to={`${base}${refQuery}`} end>
-            Files
-          </NavLink>
-          <NavLink to={`${base}/commits${refQuery}`}>Commits</NavLink>
-          <NavLink to={`${base}/branches`}>Branches ({branches.length})</NavLink>
-        </nav>
-      )}
+      <nav className="tabs">
+        <NavLink to={`${base}${refQuery}`} end>
+          Files
+        </NavLink>
+        <NavLink to={`${base}/issues`}>Issues</NavLink>
+        {project.defaultBranch && (
+          <>
+            <NavLink to={`${base}/commits${refQuery}`}>Commits</NavLink>
+            <NavLink to={`${base}/branches`}>Branches ({branches.length})</NavLink>
+          </>
+        )}
+      </nav>
       <Outlet context={{ project, branches, base, ref } satisfies ProjectContext} />
     </>
   );
