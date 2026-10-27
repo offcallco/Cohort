@@ -177,7 +177,7 @@ function usersById(db: Db | Tx, ids: number[]): Map<number, User> {
   if (ids.length === 0) return new Map();
   return new Map(
     db
-      .select({ id: users.id, username: users.username })
+      .select({ id: users.id, username: users.username, kind: users.kind })
       .from(users)
       .where(inArray(users.id, [...new Set(ids)]))
       .all()

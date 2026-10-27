@@ -44,12 +44,15 @@ export function ProjectLayout() {
           Files
         </NavLink>
         <NavLink to={`${base}/issues`}>Issues</NavLink>
+        <NavLink to={`${base}/merge_requests`}>Merge requests</NavLink>
+        <NavLink to={`${base}/jobs`}>Jobs</NavLink>
         {project.defaultBranch && (
           <>
             <NavLink to={`${base}/commits${refQuery}`}>Commits</NavLink>
             <NavLink to={`${base}/branches`}>Branches ({branches.length})</NavLink>
           </>
         )}
+        <NavLink to={`${base}/settings`}>Settings</NavLink>
       </nav>
       <Outlet context={{ project, branches, base, ref } satisfies ProjectContext} />
     </>

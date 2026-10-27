@@ -11,10 +11,22 @@ import { workspaceRoutes } from "./routes/workspaces.ts";
 import { repoRoutes } from "./routes/repos.ts";
 import { issueRoutes } from "./routes/issues.ts";
 import { gitHttpRoutes } from "./git/http.ts";
+import websocket from "@fastify/websocket";
+import { ensureBots } from "./bots.ts";
+import { JobLogs } from "./jobs/logs.ts";
+import { Jobs } from "./jobs/service.ts";
+import { RunnerHub, type HubOptions } from "./runners/hub.ts";
+import { runnerRoutes } from "./routes/runners.ts";
+import { jobRoutes } from "./routes/jobs.ts";
+import { mergeRequestRoutes } from "./routes/mrs.ts";
 
 declare module "fastify" {
   interface FastifyRequest {
     user: User | null;
+  }
+  interface FastifyInstance {
+    hub: RunnerHub;
+    jobs: Jobs;
   }
 }
 
@@ -22,6 +34,9 @@ export interface AppOptions {
   db: Db;
   // Folder holding the bare repos.
   reposRoot: string;
+  // Folder for job logs.
+  logsDir: string;
+  hub?: HubOptions;
   // Built web app to serve at "/". Omitted in dev, where Vite serves the UI.
   webDist?: string;
   allowedHosts?: string[];
@@ -30,7 +45,7 @@ export interface AppOptions {
 
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
 
-export async function buildApp({ db, reposRoot, webDist, allowedHosts = [], logger = false }: AppOptions) {
+export async function buildApp({ db, reposRoot, logsDir, hub: hubOptions, webDist, allowedHosts = [], logger = false }: AppOptions) {
   const app = Fastify({ logger });
   const hosts = new Set([...LOCAL_HOSTS, ...allowedHosts]);
 
@@ -43,6 +58,15 @@ export async function buildApp({ db, reposRoot, webDist, allowedHosts = [], logg
   });
 
   await app.register(cookie);
+  await app.register(websocket);
+
+  ensureBots(db);
+  const jobs = new Jobs(db, reposRoot, new JobLogs(logsDir));
+  const hub = new RunnerHub(db, jobs, hubOptions);
+  hub.start();
+  app.addHook("onClose", async () => hub.stop());
+  app.decorate("hub", hub);
+  app.decorate("jobs", jobs);
 
   app.decorateRequest("user", null);
   app.addHook("onRequest", async (request) => {
@@ -59,7 +83,10 @@ export async function buildApp({ db, reposRoot, webDist, allowedHosts = [], logg
   await app.register(tokenRoutes, { db });
   await app.register(workspaceRoutes, { db, reposRoot });
   await app.register(repoRoutes, { db, reposRoot });
-  await app.register(issueRoutes, { db });
+  await app.register(issueRoutes, { db, jobs });
+  await app.register(runnerRoutes, { db, hub });
+  await app.register(jobRoutes, { db, jobs });
+  await app.register(mergeRequestRoutes, { db, reposRoot, jobs });
   await app.register(gitHttpRoutes, { db, reposRoot });
 
   const serveWeb = webDist !== undefined && existsSync(webDist);

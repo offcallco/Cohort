@@ -9,6 +9,7 @@
   },
   "scripts": {
     "cohort": "tsx apps/server/src/cli.ts",
+    "runner": "tsx apps/runner/src/cli.ts",
     "dev": "pnpm --parallel --filter @cohort/server --filter @cohort/web dev",
     "build": "pnpm --filter @cohort/web build",
     "typecheck": "pnpm -r typecheck",

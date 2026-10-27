@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import {
   ISSUE_STATUSES,
@@ -7,6 +7,7 @@ import {
   type IssueRef,
   type IssueStatus,
   type UpdateIssueBody,
+  type Bot,
   type User,
 } from "@cohort/shared";
 import { api } from "../../api.ts";
@@ -16,6 +17,7 @@ import { MarkdownEditor } from "../../components/MarkdownEditor.tsx";
 import { timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
 import { parseLabels, parseNumbers } from "./NewIssueView.tsx";
+import { AgentPanel } from "./AgentPanel.tsx";
 import { useProject } from "./ProjectLayout.tsx";
 
 export function IssueView() {
@@ -24,6 +26,8 @@ export function IssueView() {
   const url = `/api/projects/${project.workspace}/${project.slug}/issues/${number}`;
   const { data, error: loadError, reload } = useApi<{ issue: IssueDetail }>(url);
   const users = useApi<{ users: User[] }>("/api/users").data?.users ?? [];
+  const bots = useApi<{ bots: Bot[] }>("/api/bots").data?.bots ?? [];
+  const botAvailable = new Map(bots.map((b) => [b.username, b.available]));
   const [issue, setIssue] = useState<IssueDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,6 +45,11 @@ export function IssueView() {
     }
   }
 
+  const refresh = useCallback(async () => {
+    setIssue(null);
+    await reload();
+  }, [reload]);
+
   if (loadError) return <p className="error">{loadError}</p>;
   if (!current) return null;
   const i = current;
@@ -55,6 +64,7 @@ export function IssueView() {
         <StatusBadge status={i.status} /> Opened {timeAgo(i.createdAt)} by {i.author.username}
       </div>
       {error && <p className="error">{error}</p>}
+      <AgentPanel key={`${i.number}-${i.assignee?.username ?? ""}`} issueNumber={i.number} onChange={refresh} />
 
       <div className="issue-layout">
         <div className="issue-body">
@@ -82,11 +92,25 @@ export function IssueView() {
           <Field title="Assignee">
             <select value={i.assignee?.username ?? ""} onChange={(e) => save({ assignee: e.target.value || null })}>
               <option value="">Unassigned</option>
-              {users.map((u) => (
-                <option key={u.id} value={u.username}>
-                  {u.username}
-                </option>
-              ))}
+              <optgroup label="People">
+                {users
+                  .filter((u) => u.kind === "human")
+                  .map((u) => (
+                    <option key={u.id} value={u.username}>
+                      {u.username}
+                    </option>
+                  ))}
+              </optgroup>
+              <optgroup label="Agents (starts a job)">
+                {users
+                  .filter((u) => u.kind === "bot")
+                  .map((u) => (
+                    <option key={u.id} value={u.username}>
+                      {u.username}
+                      {botAvailable.get(u.username) === false ? " (no runner online)" : ""}
+                    </option>
+                  ))}
+              </optgroup>
             </select>
           </Field>
           <Field title="Labels">

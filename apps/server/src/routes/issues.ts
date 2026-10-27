@@ -20,6 +20,7 @@ import {
   type ListFilter,
 } from "../issues/service.ts";
 import { parseBody, requireUser } from "../http.ts";
+import { JobError, type Jobs } from "../jobs/service.ts";
 import { findProject } from "../projects.ts";
 
 interface ProjectParams {
@@ -56,8 +57,23 @@ function guarded<T>(reply: FastifyReply, write: () => T): T | undefined {
   }
 }
 
-export async function issueRoutes(app: FastifyInstance, { db }: { db: Db }) {
+export async function issueRoutes(app: FastifyInstance, { db, jobs }: { db: Db; jobs: Jobs }) {
   app.addHook("preHandler", requireUser);
+
+  // Replies 400 if `assignee` is a bot that can't work on this project yet.
+  async function checkBotAssignee(projectId: number, assignee: string | null | undefined, reply: FastifyReply) {
+    if (!assignee) return true;
+    const user = db.select().from(users).where(eq(users.username, assignee)).get();
+    if (user?.kind !== "bot") return true;
+    try {
+      await jobs.checkAssignable(projectId);
+      return true;
+    } catch (e) {
+      if (!(e instanceof JobError)) throw e;
+      reply.code(400).send({ error: e.message });
+      return false;
+    }
+  }
 
   function project(params: ProjectParams, reply: FastifyReply) {
     const row = findProject(db, params.workspace, params.project);
@@ -77,7 +93,7 @@ export async function issueRoutes(app: FastifyInstance, { db }: { db: Db }) {
   const base = "/api/projects/:workspace/:project";
 
   app.get("/api/users", async () => ({
-    users: db.select({ id: users.id, username: users.username }).from(users).orderBy(asc(users.username)).all(),
+    users: db.select({ id: users.id, username: users.username, kind: users.kind }).from(users).orderBy(asc(users.username)).all(),
   }));
 
   app.get<{ Params: { workspace: string }; Querystring: ListQuery }>(
@@ -106,9 +122,11 @@ export async function issueRoutes(app: FastifyInstance, { db }: { db: Db }) {
     if (!p) return;
     const body = parseBody(createIssueBody, request.body, reply);
     if (!body) return;
+    if (!(await checkBotAssignee(p.id, body.assignee, reply))) return;
     const row = guarded(reply, () => createIssue(db, p.id, request.user!.id, body));
     if (!row) return;
-    return reply.code(201).send({ issue: issueDetail(db, row) });
+    await jobs.assigneeChanged(row, null);
+    return reply.code(201).send({ issue: issueDetail(db, findIssue(db, p.id, row.number)!) });
   });
 
   app.get<{ Params: IssueParams }>(`${base}/issues/:number`, async (request, reply) => {
@@ -122,9 +140,11 @@ export async function issueRoutes(app: FastifyInstance, { db }: { db: Db }) {
     if (!row) return;
     const body = parseBody(updateIssueBody, request.body, reply);
     if (!body) return;
+    if (!(await checkBotAssignee(row.projectId, body.assignee, reply))) return;
     const updated = guarded(reply, () => updateIssue(db, row, body));
     if (!updated) return;
-    return { issue: issueDetail(db, updated) };
+    await jobs.assigneeChanged(updated, row.assigneeId);
+    return { issue: issueDetail(db, findIssue(db, row.projectId, row.number)!) };
   });
 
   app.post<{ Params: IssueParams }>(`${base}/issues/:number/comments`, async (request, reply) => {

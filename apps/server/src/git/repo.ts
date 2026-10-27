@@ -235,3 +235,87 @@ export function parsePatch(patch: string): FileDiff[] {
   }
   return files;
 }
+
+// --- Branch comparison and merging (merge requests) -----------------------------------------
+
+function gitWithCode(gitDir: string, args: string[], env: NodeJS.ProcessEnv = {}) {
+  return new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+    execFile(
+      "git",
+      ["--git-dir", gitDir, ...args],
+      { maxBuffer: 64 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...env } },
+      (error, stdout, stderr) => {
+        const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
+        resolve({ code, stdout: String(stdout), stderr: String(stderr) });
+      },
+    );
+  });
+}
+
+export async function branchSha(gitDir: string, branch: string): Promise<string | null> {
+  if (!isSafeRef(branch)) return null;
+  const { code, stdout } = await gitWithCode(gitDir, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]);
+  return code === 0 ? stdout.trim() : null;
+}
+
+// Commits on `head` that aren't on `base`, newest first.
+export async function commitsBetween(gitDir: string, base: string, head: string): Promise<Commit[]> {
+  const out = await text(gitDir, ["log", `--format=${COMMIT_FORMAT}%x1e`, "-n500", `${base}..${head}`]);
+  return out
+    .split("\x1e")
+    .map((r) => r.trim())
+    .filter(Boolean)
+    .map(parseCommit);
+}
+
+// What `head` changes relative to where it branched from `base`.
+export async function diffBetween(gitDir: string, base: string, head: string): Promise<FileDiff[]> {
+  return parsePatch(await text(gitDir, ["diff", "--no-color", "--no-ext-diff", "-M", `${base}...${head}`]));
+}
+
+// Tree of `ours` merged with `theirs`, or null when they conflict.
+async function mergeTree(gitDir: string, ours: string, theirs: string): Promise<string | null> {
+  const { code, stdout, stderr } = await gitWithCode(gitDir, ["merge-tree", "--write-tree", ours, theirs]);
+  if (code === 0) return stdout.split("\n")[0]!.trim();
+  if (code === 1) return null;
+  throw new GitError(stderr.trim() || "git merge-tree failed");
+}
+
+export async function canMerge(gitDir: string, target: string, source: string) {
+  return (await mergeTree(gitDir, target, source)) !== null;
+}
+
+export class MergeConflictError extends GitError {}
+
+// Creates a merge commit of `source` into `target` and moves `target` to it, without a
+// working tree. Fails if the branches conflict or `target` moved since it was read.
+export async function mergeBranches(
+  gitDir: string,
+  target: string,
+  source: string,
+  message: string,
+  committer: { name: string; email: string },
+): Promise<string> {
+  const targetSha = await branchSha(gitDir, target);
+  const sourceSha = await branchSha(gitDir, source);
+  if (!targetSha || !sourceSha) throw new GitError("Branch not found");
+  const tree = await mergeTree(gitDir, targetSha, sourceSha);
+  if (!tree) throw new MergeConflictError("The branches have conflicts");
+  const env = {
+    GIT_AUTHOR_NAME: committer.name,
+    GIT_AUTHOR_EMAIL: committer.email,
+    GIT_COMMITTER_NAME: committer.name,
+    GIT_COMMITTER_EMAIL: committer.email,
+  };
+  const commit = await gitWithCode(gitDir, ["commit-tree", tree, "-p", targetSha, "-p", sourceSha, "-m", message], env);
+  if (commit.code !== 0) throw new GitError(commit.stderr.trim());
+  const sha = commit.stdout.trim();
+  const update = await gitWithCode(gitDir, ["update-ref", `refs/heads/${target}`, sha, targetSha]);
+  if (update.code !== 0) throw new GitError(`${target} changed while merging; try again`);
+  return sha;
+}
+
+export async function deleteBranch(gitDir: string, branch: string) {
+  if (!isSafeRef(branch)) return;
+  await gitWithCode(gitDir, ["update-ref", "-d", `refs/heads/${branch}`]);
+}

@@ -7,15 +7,16 @@ import { buildApp } from "../src/app.ts";
 export type App = Awaited<ReturnType<typeof buildApp>>;
 
 // A fresh app with an in-memory database and a temporary repos folder.
-export async function createTestApp() {
+export async function createTestApp(options: { graceMs?: number } = {}) {
   const { db, close } = openDb(":memory:");
   const tmp = mkdtempSync(join(tmpdir(), "cohort-test-"));
   const reposRoot = join(tmp, "repos");
-  const app = await buildApp({ db, reposRoot });
+  const app = await buildApp({ db, reposRoot, logsDir: join(tmp, "logs"), hub: options });
   return {
     app,
     tmp,
     reposRoot,
+    db,
     async cleanup() {
       await app.close();
       close();

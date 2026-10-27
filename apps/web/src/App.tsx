@@ -15,6 +15,13 @@ import { BranchesView } from "./pages/project/BranchesView.tsx";
 import { IssuesView } from "./pages/project/IssuesView.tsx";
 import { NewIssueView } from "./pages/project/NewIssueView.tsx";
 import { IssueView } from "./pages/project/IssueView.tsx";
+import { JobsView } from "./pages/project/JobsView.tsx";
+import { JobView } from "./pages/project/JobView.tsx";
+import { MergeRequestsView } from "./pages/project/MergeRequestsView.tsx";
+import { NewMergeRequestView } from "./pages/project/NewMergeRequestView.tsx";
+import { MergeRequestView } from "./pages/project/MergeRequestView.tsx";
+import { SettingsView } from "./pages/project/SettingsView.tsx";
+import { RunnersPage } from "./pages/RunnersPage.tsx";
 
 export function App() {
   const { status, error } = useSession();
@@ -53,6 +60,7 @@ export function App() {
         <Route index element={<HomePage />} />
         <Route path="new" element={<NewWorkspacePage />} />
         <Route path="settings/tokens" element={<TokensPage />} />
+        <Route path="settings/runners" element={<RunnersPage />} />
         <Route path=":workspace" element={<WorkspacePage />} />
         <Route path=":workspace/:project" element={<ProjectLayout />}>
           <Route index element={<TreeView />} />
@@ -64,6 +72,12 @@ export function App() {
           <Route path="issues" element={<IssuesView />} />
           <Route path="issues/new" element={<NewIssueView />} />
           <Route path="issues/:number" element={<IssueView />} />
+          <Route path="merge_requests" element={<MergeRequestsView />} />
+          <Route path="merge_requests/new" element={<NewMergeRequestView />} />
+          <Route path="merge_requests/:number" element={<MergeRequestView />} />
+          <Route path="jobs" element={<JobsView />} />
+          <Route path="jobs/:id" element={<JobView />} />
+          <Route path="settings" element={<SettingsView />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
@@ -91,6 +105,7 @@ function Shell() {
           <NavLink to="/" end>
             Workspaces
           </NavLink>
+          <NavLink to="/settings/runners">Runners</NavLink>
           <NavLink to="/settings/tokens">Access tokens</NavLink>
         </nav>
         <div className="spacer" />

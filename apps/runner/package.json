@@ -1,0 +1,19 @@
+{
+  "name": "@cohort/runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cohort/shared": "workspace:*",
+    "smol-toml": "^1.9.1",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2",
+    "vitest": "^5.0.5"
+  }
+}

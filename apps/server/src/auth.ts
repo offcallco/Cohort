@@ -47,7 +47,7 @@ export function deleteSession(db: Db, token: string) {
 
 export function userForSession(db: Db, token: string): User | null {
   const row = db
-    .select({ id: users.id, username: users.username, expiresAt: sessions.expiresAt })
+    .select({ id: users.id, username: users.username, kind: users.kind, expiresAt: sessions.expiresAt })
     .from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
     .where(eq(sessions.tokenHash, sha256(token)))
@@ -57,7 +57,7 @@ export function userForSession(db: Db, token: string): User | null {
     deleteSession(db, token);
     return null;
   }
-  return { id: row.id, username: row.username };
+  return { id: row.id, username: row.username, kind: row.kind };
 }
 
 export function createAccessToken(db: Db, userId: number, name: string) {
@@ -73,7 +73,7 @@ export function createAccessToken(db: Db, userId: number, name: string) {
 export function userForAccessToken(db: Db, token: string): User | null {
   if (!token.startsWith(TOKEN_PREFIX)) return null;
   const row = db
-    .select({ id: users.id, username: users.username, tokenId: accessTokens.id })
+    .select({ id: users.id, username: users.username, kind: users.kind, tokenId: accessTokens.id })
     .from(accessTokens)
     .innerJoin(users, eq(users.id, accessTokens.userId))
     .where(eq(accessTokens.tokenHash, sha256(token)))
@@ -83,5 +83,5 @@ export function userForAccessToken(db: Db, token: string): User | null {
     .set({ lastUsedAt: new Date() })
     .where(eq(accessTokens.id, row.tokenId))
     .run();
-  return { id: row.id, username: row.username };
+  return { id: row.id, username: row.username, kind: row.kind };
 }

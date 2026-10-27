@@ -1,5 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { Db } from "@cohort/db";
+import { eq } from "drizzle-orm";
+import { projects, type Db } from "@cohort/db";
+import { updateProjectBody } from "@cohort/shared";
 import {
   blob,
   branches,
@@ -10,7 +12,7 @@ import {
   resolveCommit,
   tree,
 } from "../git/repo.ts";
-import { requireUser } from "../http.ts";
+import { parseBody, requireUser } from "../http.ts";
 import { findProject } from "../projects.ts";
 import { projectToApi } from "./workspaces.ts";
 
@@ -66,6 +68,16 @@ export async function repoRoutes(app: FastifyInstance, { db, reposRoot }: { db: 
     const loaded = await load(request, reply);
     if (!loaded) return;
     return { project: loaded.project, branches: await branches(loaded.gitDir) };
+  });
+
+  app.patch<{ Params: Params }>(base, async (request, reply) => {
+    const loaded = await load(request as Req, reply);
+    if (!loaded) return;
+    const body = parseBody(updateProjectBody, request.body, reply);
+    if (!body) return;
+    db.update(projects).set(body).where(eq(projects.id, loaded.project.id)).run();
+    const row = findProject(db, request.params.workspace, request.params.project)!;
+    return { project: await projectToApi(reposRoot, request.params.workspace, row) };
   });
 
   app.get<{ Params: Params; Querystring: Query }>(`${base}/tree`, async (request, reply) => {

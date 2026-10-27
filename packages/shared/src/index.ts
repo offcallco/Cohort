@@ -19,9 +19,13 @@ export const createTokenBody = z.object({
 });
 export type CreateTokenBody = z.infer<typeof createTokenBody>;
 
+export * from "./protocol.ts";
+import type { AgentInfo, AgentType } from "./protocol.ts";
+
 export interface User {
   id: number;
   username: string;
+  kind: "human" | "bot";
 }
 
 export interface Status {
@@ -113,6 +117,7 @@ export interface Project {
   clonePath: string;
   // Null while the repo has no commits.
   defaultBranch: string | null;
+  runnerContext: string;
 }
 
 export interface WorkspaceWithProjects extends Workspace {
@@ -253,4 +258,98 @@ export interface IssueDetail extends IssueSummary {
   // Issues that wait on this one.
   blocks: IssueRef[];
   commentList: IssueComment[];
+}
+
+export const updateProjectBody = z.object({
+  description: z.string().trim().max(500).optional(),
+  runnerContext: z.string().max(20_000).optional(),
+});
+
+// Runners and jobs
+
+export const createRunnerBody = z.object({
+  name: z.string().trim().min(1, "Name is required").max(100),
+});
+
+export interface Runner {
+  id: number;
+  name: string;
+  prefix: string;
+  online: boolean;
+  agents: AgentInfo[];
+  concurrent: number | null;
+  runningJobs: number;
+  lastSeenAt: string | null;
+  createdAt: string;
+}
+
+export interface Bot extends User {
+  agentType: AgentType;
+  // True when at least one connected runner can run this bot's agent.
+  available: boolean;
+}
+
+export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
+
+export interface Job {
+  id: number;
+  project: string;
+  kind: "implement";
+  issue: IssueRef | null;
+  bot: string;
+  agentType: AgentType;
+  status: JobStatus;
+  runner: string | null;
+  branch: string;
+  baseBranch: string;
+  summary: string | null;
+  error: string | null;
+  commitSha: string | null;
+  mergeRequest: number | null;
+  // Why a queued job isn't running yet, e.g. no runner online for its agent.
+  waitingReason: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+// Merge requests
+
+export type MergeRequestStatus = "open" | "merged" | "closed";
+
+export const createMergeRequestBody = z.object({
+  title: z.string().trim().min(1, "Title is required").max(255),
+  description: z.string().max(100_000).default(""),
+  sourceBranch: z.string().min(1),
+  targetBranch: z.string().min(1),
+});
+
+export const mergeBody = z.object({
+  deleteSourceBranch: z.boolean().default(true),
+});
+
+export interface MergeRequestSummary {
+  id: number;
+  number: number;
+  project: string;
+  title: string;
+  status: MergeRequestStatus;
+  sourceBranch: string;
+  targetBranch: string;
+  author: User;
+  issue: IssueRef | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MergeRequestDetail extends MergeRequestSummary {
+  description: string;
+  // Null once merged or closed, or when a branch is gone.
+  mergeable: boolean | null;
+  commits: Commit[];
+  files: FileDiff[];
+  comments: IssueComment[];
+  jobs: Job[];
+  mergeSha: string | null;
+  mergedAt: string | null;
 }

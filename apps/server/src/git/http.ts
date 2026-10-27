@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { Db } from "@cohort/db";
 import { userForAccessToken } from "../auth.ts";
 import { findProject } from "../projects.ts";
+import { userForJobToken } from "../runners/hub.ts";
 
 // Git smart HTTP (clone, fetch, push), delegated to `git http-backend` as a CGI program.
 // Auth is an access token, sent as the password (any username) or as a Bearer token.
@@ -43,13 +44,17 @@ export async function gitHttpRoutes(
   );
 
   async function handle(request: FastifyRequest<{ Params: Params }>, reply: FastifyReply, rest: string) {
-    const token = tokenFromRequest(request);
-    const user = token ? userForAccessToken(db, token) : null;
-    if (!user) return challenge(reply, token ? "Invalid access token." : "Authentication required.");
-
     const { workspace } = request.params;
     const project = request.params.repo.replace(/\.git$/, "");
-    if (!findProject(db, workspace, project)) return reply.code(404).type("text/plain").send("Repository not found.\n");
+    const found = findProject(db, workspace, project);
+
+    // Access tokens work for every repo; job tokens only for their job's repo while it runs.
+    const token = tokenFromRequest(request);
+    const user = token
+      ? (userForAccessToken(db, token) ?? (found ? userForJobToken(db, token, found.id) : null))
+      : null;
+    if (!user) return challenge(reply, token ? "Invalid access token." : "Authentication required.");
+    if (!found) return reply.code(404).type("text/plain").send("Repository not found.\n");
 
     const query = request.url.includes("?") ? request.url.slice(request.url.indexOf("?") + 1) : "";
     if (rest === "info/refs") {

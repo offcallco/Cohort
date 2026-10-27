@@ -8,13 +8,16 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "vitest": "^5.0.5"
+    "@types/ws": "^8.18.2",
+    "vitest": "^5.0.5",
+    "ws": "^8.22.0"
   },
   "dependencies": {
     "@cohort/db": "workspace:*",
     "@cohort/shared": "workspace:*",
     "@fastify/cookie": "^11.1.5",
     "@fastify/static": "^10.1.8",
+    "@fastify/websocket": "^11.3.4",
     "drizzle-orm": "^0.45.4",
     "fastify": "^5.12.7",
     "zod": "^4.6.7"
