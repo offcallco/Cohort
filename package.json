@@ -1,0 +1,22 @@
+{
+  "name": "cohort",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "cohort": "tsx apps/server/src/cli.ts",
+    "dev": "pnpm --parallel --filter @cohort/server --filter @cohort/web dev",
+    "build": "pnpm --filter @cohort/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
