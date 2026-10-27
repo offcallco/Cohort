@@ -38,6 +38,7 @@ async function start(dev: boolean) {
   const { db, close } = openDb(p.db);
   const app = await buildApp({
     db,
+    reposRoot: p.repos,
     webDist: dev ? undefined : webDist,
     allowedHosts: config.allowedHosts,
   });

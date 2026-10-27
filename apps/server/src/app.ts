@@ -7,6 +7,9 @@ import type { User } from "@cohort/shared";
 import { SESSION_COOKIE, userForAccessToken, userForSession } from "./auth.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { tokenRoutes } from "./routes/tokens.ts";
+import { workspaceRoutes } from "./routes/workspaces.ts";
+import { repoRoutes } from "./routes/repos.ts";
+import { gitHttpRoutes } from "./git/http.ts";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -16,6 +19,8 @@ declare module "fastify" {
 
 export interface AppOptions {
   db: Db;
+  // Folder holding the bare repos.
+  reposRoot: string;
   // Built web app to serve at "/". Omitted in dev, where Vite serves the UI.
   webDist?: string;
   allowedHosts?: string[];
@@ -24,7 +29,7 @@ export interface AppOptions {
 
 const LOCAL_HOSTS = ["localhost", "127.0.0.1", "[::1]"];
 
-export async function buildApp({ db, webDist, allowedHosts = [], logger = false }: AppOptions) {
+export async function buildApp({ db, reposRoot, webDist, allowedHosts = [], logger = false }: AppOptions) {
   const app = Fastify({ logger });
   const hosts = new Set([...LOCAL_HOSTS, ...allowedHosts]);
 
@@ -51,6 +56,9 @@ export async function buildApp({ db, webDist, allowedHosts = [], logger = false 
 
   await app.register(authRoutes, { db });
   await app.register(tokenRoutes, { db });
+  await app.register(workspaceRoutes, { db, reposRoot });
+  await app.register(repoRoutes, { db, reposRoot });
+  await app.register(gitHttpRoutes, { db, reposRoot });
 
   const serveWeb = webDist !== undefined && existsSync(webDist);
   if (serveWeb) await app.register(fastifyStatic, { root: webDist, wildcard: false });

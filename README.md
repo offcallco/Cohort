@@ -20,6 +20,13 @@ pnpm cohort start
 Open http://localhost:7700 and create your account. The first start builds the web UI, which
 takes a few seconds.
 
+## Using git
+
+Create a workspace and a project in the UI, then clone or push with the URL shown on the project
+page, like `http://localhost:7700/my-workspace/my-project.git`. When git asks for credentials,
+use any username and an access token (Settings → Access tokens) as the password. Your OS
+credential helper remembers it after the first time.
+
 Cohort keeps all its data in `~/.cohort/`: the SQLite database, your repos and runner files.
 
 ## Configuration
@@ -37,7 +44,7 @@ Set these environment variables before `pnpm cohort start`:
 
 ```sh
 pnpm dev          # API on :7700 and the UI with hot reload on http://localhost:5173
-pnpm test         # server tests
+pnpm test         # server tests (needs git on PATH)
 pnpm typecheck    # all packages
 ```
 

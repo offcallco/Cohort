@@ -4,6 +4,14 @@ import { useSession } from "./session.tsx";
 import { AuthPage } from "./pages/AuthPage.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
 import { TokensPage } from "./pages/TokensPage.tsx";
+import { NewWorkspacePage } from "./pages/NewWorkspacePage.tsx";
+import { WorkspacePage } from "./pages/WorkspacePage.tsx";
+import { ProjectLayout } from "./pages/project/ProjectLayout.tsx";
+import { TreeView } from "./pages/project/TreeView.tsx";
+import { BlobView } from "./pages/project/BlobView.tsx";
+import { CommitsView } from "./pages/project/CommitsView.tsx";
+import { CommitView } from "./pages/project/CommitView.tsx";
+import { BranchesView } from "./pages/project/BranchesView.tsx";
 
 export function App() {
   const { status, error } = useSession();
@@ -40,7 +48,17 @@ export function App() {
     <Routes>
       <Route element={<Shell />}>
         <Route index element={<HomePage />} />
+        <Route path="new" element={<NewWorkspacePage />} />
         <Route path="settings/tokens" element={<TokensPage />} />
+        <Route path=":workspace" element={<WorkspacePage />} />
+        <Route path=":workspace/:project" element={<ProjectLayout />}>
+          <Route index element={<TreeView />} />
+          <Route path="tree" element={<TreeView />} />
+          <Route path="blob" element={<BlobView />} />
+          <Route path="commits" element={<CommitsView />} />
+          <Route path="commit/:sha" element={<CommitView />} />
+          <Route path="branches" element={<BranchesView />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
@@ -65,7 +83,7 @@ function Shell() {
         </NavLink>
         <nav>
           <NavLink to="/" end>
-            Home
+            Workspaces
           </NavLink>
           <NavLink to="/settings/tokens">Access tokens</NavLink>
         </nav>

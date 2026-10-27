@@ -1,31 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { openDb } from "@cohort/db";
-import { buildApp } from "../src/app.ts";
-
-type App = Awaited<ReturnType<typeof buildApp>>;
+import { createTestApp, creds, signUp, type App } from "./helpers.ts";
 
 let app: App;
-let close: () => void;
+let cleanup: () => Promise<void>;
 
 beforeEach(async () => {
-  const opened = openDb(":memory:");
-  close = opened.close;
-  app = await buildApp({ db: opened.db });
+  ({ app, cleanup } = await createTestApp());
 });
 
-afterEach(async () => {
-  await app.close();
-  close();
-});
-
-const creds = { username: "justin", password: "correct horse" };
+afterEach(() => cleanup());
 
 async function setup() {
-  const res = await app.inject({ method: "POST", url: "/api/setup", payload: creds });
-  expect(res.statusCode).toBe(201);
-  const cookie = res.cookies.find((c) => c.name === "cohort_session");
-  expect(cookie?.httpOnly).toBe(true);
-  return { cookie: `cohort_session=${cookie!.value}` };
+  const { cookie, setCookie } = await signUp(app);
+  expect(setCookie.httpOnly).toBe(true);
+  return { cookie };
 }
 
 describe("setup and sessions", () => {
