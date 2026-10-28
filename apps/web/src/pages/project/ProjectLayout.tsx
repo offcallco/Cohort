@@ -43,6 +43,7 @@ export function ProjectLayout() {
         <NavLink to={`${base}${refQuery}`} end>
           Files
         </NavLink>
+        <NavLink to={`${base}/workshops`}>Workshops</NavLink>
         <NavLink to={`${base}/issues`}>Issues</NavLink>
         <NavLink to={`${base}/merge_requests`}>Merge requests</NavLink>
         <NavLink to={`${base}/jobs`}>Jobs</NavLink>

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentConfig } from "../config.ts";
 import { commandWorks, runProcess } from "../process.ts";
-import type { AgentAdapter, RunOptions, RunResult } from "./types.ts";
+import type { AgentAdapter, PlanOptions, PlanResult, RunOptions, RunResult } from "./types.ts";
 
 interface CodexEvent {
   type?: string;
@@ -17,6 +17,8 @@ interface CodexEvent {
 // OpenAI Codex CLI in non-interactive mode (`codex exec --json`).
 export class CodexAgent implements AgentAdapter {
   readonly type = "codex" as const;
+  // Each plan turn starts fresh with the full transcript.
+  readonly resumable = false;
   readonly name: string;
   private readonly command: string;
 
@@ -29,13 +31,23 @@ export class CodexAgent implements AgentAdapter {
     return commandWorks(this.command, ["--version"]);
   }
 
-  async implement({ cwd, prompt, env, signal, log }: RunOptions): Promise<RunResult> {
+  implement(options: RunOptions): Promise<RunResult> {
+    return this.exec(options, ["--full-auto"]);
+  }
+
+  async plan(options: PlanOptions): Promise<PlanResult> {
+    // Read-only sandbox: Codex can read files and run read-only commands, but not write.
+    const { summary, error } = await this.exec(options, ["--sandbox", "read-only"]);
+    return { text: summary, sessionId: null, error };
+  }
+
+  private async exec({ cwd, prompt, env, signal, log }: RunOptions, mode: string[]): Promise<RunResult> {
     const tmp = mkdtempSync(join(tmpdir(), "cohort-codex-"));
     const lastMessage = join(tmp, "last-message.txt");
     const args = [
       "exec",
       "--json",
-      "--full-auto",
+      ...mode,
       "--skip-git-repo-check",
       "--cd",
       cwd,

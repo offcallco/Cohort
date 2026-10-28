@@ -1,6 +1,6 @@
 import type { AgentConfig } from "../config.ts";
 import { commandWorks, runProcess } from "../process.ts";
-import type { AgentAdapter, RunOptions, RunResult } from "./types.ts";
+import type { AgentAdapter, PlanOptions, PlanResult, RunOptions, RunResult } from "./types.ts";
 
 interface ContentBlock {
   type: string;
@@ -29,9 +29,18 @@ function describeTool(block: ContentBlock) {
   return `→ ${block.name}${typeof detail === "string" ? ` ${detail.split("\n")[0]!.slice(0, 160)}` : ""}`;
 }
 
+interface Session {
+  result: StreamEvent | null;
+  sessionId: string | null;
+  code: number | null;
+  stderr: string;
+  sessionMissing: boolean;
+}
+
 // Claude Code in headless mode (`claude -p`), reading its stream-json events.
 export class ClaudeCodeAgent implements AgentAdapter {
   readonly type = "claude-code" as const;
+  readonly resumable = true;
   readonly name: string;
   private readonly command: string;
 
@@ -44,7 +53,11 @@ export class ClaudeCodeAgent implements AgentAdapter {
     return commandWorks(this.command, ["--version"]);
   }
 
-  async implement({ cwd, prompt, env, signal, log }: RunOptions): Promise<RunResult> {
+  private async session(
+    { cwd, prompt, env, signal, log }: RunOptions,
+    permissionMode: string,
+    resume: string | null,
+  ): Promise<Session> {
     const args = [
       "-p",
       prompt,
@@ -52,11 +65,14 @@ export class ClaudeCodeAgent implements AgentAdapter {
       "stream-json",
       "--verbose",
       "--permission-mode",
-      this.config.permission_mode,
+      permissionMode,
+      ...(resume ? ["--resume", resume] : []),
       ...(this.config.model ? ["--model", this.config.model] : []),
       ...this.config.args,
     ];
     let result: StreamEvent | null = null;
+    let sessionId: string | null = null;
+    let sessionMissing = false;
 
     const { code, stderr } = await runProcess(this.command, args, {
       cwd,
@@ -68,11 +84,13 @@ export class ClaudeCodeAgent implements AgentAdapter {
         try {
           event = JSON.parse(line) as StreamEvent;
         } catch {
+          if (/No conversation found/i.test(line)) sessionMissing = true;
           log(`${line}\n`);
           return;
         }
+        if (event.session_id) sessionId = event.session_id;
         if (event.type === "system" && event.subtype === "init") {
-          log(`Claude Code started${event.model ? ` (${event.model})` : ""}\n`);
+          log(`Claude Code ${resume ? "resumed" : "started"}${event.model ? ` (${event.model})` : ""}\n`);
         } else if (event.type === "assistant") {
           for (const block of event.message?.content ?? []) {
             if (block.type === "text" && block.text?.trim()) log(`${block.text.trim()}\n`);
@@ -90,15 +108,37 @@ export class ClaudeCodeAgent implements AgentAdapter {
           if (typeof event.total_cost_usd === "number") log(`Cost: $${event.total_cost_usd.toFixed(4)}\n`);
         }
       },
-      onStderr: (text) => log(text),
+      onStderr: (text) => {
+        if (/No conversation found/i.test(text)) sessionMissing = true;
+        log(text);
+      },
     });
+    return { result, sessionId, code, stderr, sessionMissing };
+  }
 
-    if (signal.aborted) return { summary: "", error: "Canceled" };
-    const final = result as StreamEvent | null;
-    if (!final) return { summary: "", error: `claude exited with code ${code}${stderr ? `: ${stderr.trim().slice(-500)}` : ""}` };
-    if (final.is_error || final.subtype !== "success") {
-      return { summary: final.result ?? "", error: final.result || `Claude Code stopped: ${final.subtype}` };
-    }
-    return { summary: final.result ?? "" };
+  private failure(s: Session): string | undefined {
+    const final = s.result;
+    if (!final) return `claude exited with code ${s.code}${s.stderr ? `: ${s.stderr.trim().slice(-500)}` : ""}`;
+    if (final.is_error || final.subtype !== "success") return final.result || `Claude Code stopped: ${final.subtype}`;
+    return undefined;
+  }
+
+  async implement(options: RunOptions): Promise<RunResult> {
+    const s = await this.session(options, this.config.permission_mode, null);
+    if (options.signal.aborted) return { summary: "", error: "Canceled" };
+    return { summary: s.result?.result ?? "", error: this.failure(s) };
+  }
+
+  async plan(options: PlanOptions): Promise<PlanResult> {
+    // "plan" mode: Claude can read files and search, but not edit or run commands.
+    const s = await this.session(options, "plan", options.resume);
+    if (options.signal.aborted) return { text: "", sessionId: s.sessionId, error: "Canceled" };
+    const error = this.failure(s);
+    return {
+      text: s.result?.result ?? "",
+      sessionId: s.sessionId,
+      error,
+      sessionMissing: error !== undefined && s.sessionMissing,
+    };
   }
 }

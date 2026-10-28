@@ -19,6 +19,8 @@ import { RunnerHub, type HubOptions } from "./runners/hub.ts";
 import { runnerRoutes } from "./routes/runners.ts";
 import { jobRoutes } from "./routes/jobs.ts";
 import { mergeRequestRoutes } from "./routes/mrs.ts";
+import { workshopRoutes } from "./routes/workshops.ts";
+import { Workshops } from "./workshops/service.ts";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -63,6 +65,8 @@ export async function buildApp({ db, reposRoot, logsDir, hub: hubOptions, webDis
   ensureBots(db);
   const jobs = new Jobs(db, reposRoot, new JobLogs(logsDir));
   const hub = new RunnerHub(db, jobs, hubOptions);
+  const workshops = new Workshops(db, reposRoot, jobs);
+  workshops.broadcaster = hub;
   hub.start();
   app.addHook("onClose", async () => hub.stop());
   app.decorate("hub", hub);
@@ -87,6 +91,7 @@ export async function buildApp({ db, reposRoot, logsDir, hub: hubOptions, webDis
   await app.register(runnerRoutes, { db, hub });
   await app.register(jobRoutes, { db, jobs });
   await app.register(mergeRequestRoutes, { db, reposRoot, jobs });
+  await app.register(workshopRoutes, { db, workshops });
   await app.register(gitHttpRoutes, { db, reposRoot });
 
   const serveWeb = webDist !== undefined && existsSync(webDist);

@@ -27,6 +27,19 @@ page, like `http://localhost:7700/my-workspace/my-project.git`. When git asks fo
 use any username and an access token (Settings → Access tokens) as the password. Your OS
 credential helper remembers it after the first time.
 
+## Plan workshops
+
+Before cutting issues, workshop the idea with an agent (project → **Workshops** → New
+workshop). The agent reads the project's code in a read-only checkout on a runner, asks you one
+question at a time with its recommended answer, pushes back on vague answers, and keeps a plan
+document up to date beside the chat. When the plan is solid, **Propose issues** asks it to
+break the plan into small, ordered issues; edit or remove them, then create them. They're
+linked by dependencies and, optionally, grouped under a "Plan" issue that holds the plan.
+
+Claude Code workshops run in Claude's `plan` mode and resume the same session each turn.
+Codex workshops run in its read-only sandbox with the conversation so far. If no runner can
+take the turn, your message waits in the queue and the workshop says why.
+
 ## Agents
 
 Assign an issue to **claude-bot** (Claude Code) or **codex-bot** (OpenAI Codex) and a runner
