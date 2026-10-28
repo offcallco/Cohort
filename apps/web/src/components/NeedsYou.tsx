@@ -42,7 +42,7 @@ export function NeedsYouRow({ item, onDone }: { item: NeedsYouItem; onDone: () =
     <li className={`need-row${failed ? " need-failed" : ""}`}>
       <Icon size={16} className="need-icon" aria-hidden />
       <div className="need-main">
-        <Link to={item.href} className="need-title">
+        <Link to={item.href} className="need-title" data-row>
           {item.title}
         </Link>
         <div className="need-text">{item.need}</div>

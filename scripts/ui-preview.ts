@@ -112,6 +112,7 @@ async function seed(db: Db) {
   await call("POST", "/api/projects/internal/tools/issues", { title: "Nightly backup script", assignee: "justin" });
 
   const bot = db.select().from(users).all().find((u) => u.username === "claude-bot")!;
+  const me = db.select().from(users).all().find((u) => u.username === "justin")!;
   const minutes = (n: number) => new Date(Date.now() - n * 60_000);
   const set = (id: number, status: "in_progress" | "review" | "blocked" | "done") =>
     db.update(issuesTable).set({ status, assigneeId: bot.id }).where(eq(issuesTable.id, id)).run();
@@ -172,7 +173,7 @@ async function seed(db: Db) {
   db.delete(pipelineJobs).run();
   db.delete(pipelines).run();
   const mainSha = (await git(work, "rev-parse", "main")).stdout.trim();
-  const mainPipeline = db.insert(pipelines).values({ projectId: 1, ref: "main", sha: mainSha, status: "success", source: "push", triggeredById: 1, startedAt: minutes(400), finishedAt: minutes(398) }).returning().get();
+  const mainPipeline = db.insert(pipelines).values({ projectId: 1, ref: "main", sha: mainSha, status: "success", source: "push", triggeredById: me.id, startedAt: minutes(400), finishedAt: minutes(398) }).returning().get();
   db.insert(pipelineJobs).values([
     { pipelineId: mainPipeline.id, name: "test", stage: "test", stageIndex: 1, script: '["npm test"]', status: "success" },
     { pipelineId: mainPipeline.id, name: "lint", stage: "test", stageIndex: 1, script: '["echo lint ok"]', status: "success" },
@@ -186,7 +187,7 @@ async function seed(db: Db) {
 
   const w = db
     .insert(workshops)
-    .values({ projectId: 1, title: "Payout scheduling", botId: bot.id, baseBranch: "main", createdById: 1, plan: "# Payout scheduling\n\n## Goal\nLet merchants choose daily or weekly payouts.\n\n## Decisions\n- Weekly payouts run on Mondays." })
+    .values({ projectId: 1, title: "Payout scheduling", botId: bot.id, baseBranch: "main", createdById: me.id, plan: "# Payout scheduling\n\n## Goal\nLet merchants choose daily or weekly payouts.\n\n## Decisions\n- Weekly payouts run on Mondays." })
     .returning()
     .get();
   db.insert(workshopMessages).values([

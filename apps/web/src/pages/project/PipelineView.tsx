@@ -6,6 +6,7 @@ import { PipelineStatusPill } from "../../components/PipelineBits.tsx";
 import { shortSha, timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
 import { useProject } from "./ProjectLayout.tsx";
+import { SkeletonRows } from "../../components/Skeleton.tsx";
 
 const ACTIVE = new Set(["pending", "running", "manual"]);
 
@@ -36,7 +37,7 @@ export function PipelineView() {
   }
 
   if (loadError) return <p className="error">{loadError}</p>;
-  if (!data) return null;
+  if (!data) return <SkeletonRows rows={3} height={56} />;
   const p = data.pipeline;
   const selected = p.jobs.find((j) => String(j.id) === search.get("job")) ?? null;
 

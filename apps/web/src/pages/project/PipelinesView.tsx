@@ -6,6 +6,8 @@ import { PipelineStatusPill } from "../../components/PipelineBits.tsx";
 import { shortSha, timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
 import { useProject } from "./ProjectLayout.tsx";
+import { SkeletonRows } from "../../components/Skeleton.tsx";
+import { ErrorState } from "../../components/States.tsx";
 
 const sourceLabel = { push: "push", merge_request: "merge request", web: "run by hand" } as const;
 
@@ -48,7 +50,8 @@ export function PipelinesView() {
         )}
       </div>
       {runError && <p className="error">{runError}</p>}
-      {error && <p className="error">{error}</p>}
+      {error && <ErrorState what="the pipelines" error={error} />}
+      {!data && !error && <SkeletonRows rows={4} height={52} />}
       {data &&
         (data.pipelines.length === 0 ? (
           <section className="panel empty">

@@ -4,6 +4,8 @@ import { timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
 import { StatusPill } from "../../components/StatusPill.tsx";
 import { useProject } from "./ProjectLayout.tsx";
+import { SkeletonRows } from "../../components/Skeleton.tsx";
+import { ErrorState } from "../../components/States.tsx";
 
 const statusTone = { active: "running", done: "passed", closed: "idle" } as const;
 const statusLabel = { active: "Active", done: "Issues created", closed: "Closed" } as const;
@@ -27,7 +29,8 @@ export function WorkshopsView() {
           </Link>
         )}
       </div>
-      {error && <p className="error">{error}</p>}
+      {error && <ErrorState what="the workshops" error={error} />}
+      {!data && !error && <SkeletonRows rows={3} height={52} />}
       {data &&
         (data.workshops.length === 0 ? (
           <section className="panel empty">

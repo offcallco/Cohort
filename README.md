@@ -20,6 +20,24 @@ pnpm cohort start
 Open http://localhost:7700 and create your account. The first start builds the web UI, which
 takes a few seconds.
 
+## The UI
+
+Cohort is built around overseeing agents rather than browsing repos (see `docs/UI_GUIDE.md`):
+
+- **Mission Control** (home): what needs you, what's running, and what just finished.
+- **Reviews**: everything waiting on you — plans to approve, changes to review, pipelines to
+  start, failed runs, workshop questions. Empty means nothing needs you.
+- **Work**: every issue across repos, filtered by Needs me, Running, Failed, Mine, Agent-owned.
+- **Agents**: each agent's runs, cost and history, and the runners.
+- **Activity**: who or what changed what, and when.
+- Each issue shows its loop (Spec → Plan → Code → Test → Review → Merge), the evidence, and the
+  actions you can take right now.
+
+Press **⌘K** (Ctrl+K) to jump anywhere; `g` then `m`/`r`/`w`/`a` goes to Mission Control, Reviews,
+Work or Agents; `j`/`k` move through lists; `/` searches a repo; `n`/`p` move between files in a
+diff. To preview the UI against demo data, run `pnpm ui:preview` (screenshots) or
+`pnpm ui:preview --serve` (a live demo server).
+
 ## Using git
 
 Create a workspace and a project in the UI, then clone or push with the URL shown on the project

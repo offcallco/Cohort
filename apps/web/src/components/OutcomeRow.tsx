@@ -24,7 +24,7 @@ export function OutcomeRow({ outcome }: { outcome: Outcome }) {
         <StatusPill tone="idle" icon="pause" label="Stopped" />
       )}
       <div className="outcome-main">
-        <Link to={outcome.href} className="outcome-title">
+        <Link to={outcome.href} className="outcome-title" data-row>
           {outcome.title}
         </Link>
         <div className="meta">

@@ -4,6 +4,8 @@ import { JOB_KIND_LABELS, JobStatusPill } from "../../components/Pills.tsx";
 import { timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
 import { useProject } from "./ProjectLayout.tsx";
+import { SkeletonRows } from "../../components/Skeleton.tsx";
+import { ErrorState } from "../../components/States.tsx";
 
 export function JobsView() {
   const { project, base } = useProject();
@@ -11,8 +13,8 @@ export function JobsView() {
     pollMs: 3000,
     poll: (d) => d.jobs.some((j) => j.status === "queued" || j.status === "running"),
   });
-  if (error) return <p className="error">{error}</p>;
-  if (!data) return null;
+  if (error) return <ErrorState what="the agent runs" error={error} />;
+  if (!data) return <SkeletonRows rows={4} height={48} />;
   if (data.jobs.length === 0) {
     return (
       <section className="panel empty">

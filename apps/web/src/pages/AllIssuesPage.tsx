@@ -1,13 +1,25 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import { ISSUE_STATUSES, STATUS_LABELS, type IssueSummary, type WorkspaceWithProjects } from "@cohort/shared";
+import type { IssueSummary, WorkspaceWithProjects } from "@cohort/shared";
 import { IssueRow } from "../components/IssueBits.tsx";
 import { useApi } from "../hooks.ts";
+import { SkeletonRows } from "../components/Skeleton.tsx";
+import { ErrorState } from "../components/States.tsx";
+
+// The guide's list filters: Needs me, Running, Failed, Merged, Mine, Agent-owned.
+const STATUS_CHIPS = [
+  ["open", "Open"],
+  ["review", "Needs me"],
+  ["in_progress", "Running"],
+  ["blocked", "Failed"],
+  ["done", "Done"],
+  ["all", "All"],
+] as const;
 
 const ASSIGNEES = [
   ["", "Anyone"],
-  ["me", "Assigned to me"],
-  ["agents", "Assigned to agents"],
+  ["me", "Mine"],
+  ["agents", "Agent-owned"],
   ["none", "Unassigned"],
 ] as const;
 
@@ -55,24 +67,22 @@ export function AllIssuesPage() {
         )}
       </div>
       <div className="toolbar">
-        <select value={status} onChange={(e) => update("status", e.target.value === "open" ? null : e.target.value)}>
-          <option value="open">Open</option>
-          <option value="all">All</option>
-          {ISSUE_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-        <select value={assignee} onChange={(e) => update("assignee", e.target.value || null)}>
-          {ASSIGNEES.map(([value, label]) => (
-            <option key={value} value={value}>
+        <div className="chips" role="group" aria-label="Status">
+          {STATUS_CHIPS.map(([value, label]) => (
+            <button key={value} className={`chip${status === value ? " active" : ""}`} aria-pressed={status === value} onClick={() => update("status", value === "open" ? null : value)}>
               {label}
-            </option>
+            </button>
           ))}
-        </select>
+        </div>
+        <div className="chips" role="group" aria-label="Owner">
+          {ASSIGNEES.map(([value, label]) => (
+            <button key={value} className={`chip${assignee === value ? " active" : ""}`} aria-pressed={assignee === value} onClick={() => update("assignee", value || null)}>
+              {label}
+            </button>
+          ))}
+        </div>
         {workspaces.length > 1 && (
-          <select value={workspace} onChange={(e) => update("workspace", e.target.value || null)}>
+          <select value={workspace} onChange={(e) => update("workspace", e.target.value || null)} aria-label="Workspace">
             <option value="">All workspaces</option>
             {workspaces.map((w) => (
               <option key={w.id} value={w.slug}>
@@ -81,10 +91,11 @@ export function AllIssuesPage() {
             ))}
           </select>
         )}
-        <input className="search" placeholder="Search titles" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="search" placeholder="Search titles" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search titles" />
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <ErrorState what="your work" error={error} />}
+      {!data && !error && <SkeletonRows rows={6} height={52} />}
       {data &&
         (data.issues.length === 0 ? (
           <section className="panel empty">

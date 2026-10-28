@@ -6,6 +6,7 @@ import { api } from "../api.ts";
 import { useSession } from "../session.tsx";
 import { useApi } from "../hooks.ts";
 import { CommandPalette } from "./CommandPalette.tsx";
+import { PageBoundary } from "../components/States.tsx";
 import { NAV } from "./nav.ts";
 
 // Left nav + contextual top bar. Pages render in the content area.
@@ -83,7 +84,9 @@ export function AppShell() {
           </details>
         </header>
         <main className={`content${wide ? " wide" : ""}`}>
-          <Outlet />
+          <PageBoundary resetKey={location.pathname}>
+            <Outlet />
+          </PageBoundary>
         </main>
       </div>
       {palette && <CommandPalette onClose={() => setPalette(false)} />}
@@ -155,6 +158,17 @@ function useShortcuts(openPalette: () => void) {
       if (target.closest("input, textarea, select, [contenteditable]") || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "g") {
         pendingG = Date.now();
+        return;
+      }
+      // j / k move through the rows of whatever list is on the page; Enter opens the row.
+      if ((e.key === "j" || e.key === "k") && Date.now() - pendingG > 1000) {
+        const rows = [...document.querySelectorAll<HTMLElement>("main [data-row]")];
+        if (rows.length === 0) return;
+        const at = rows.indexOf(document.activeElement as HTMLElement);
+        const next = e.key === "j" ? Math.min(at + 1, rows.length - 1) : Math.max(at - 1, 0);
+        rows[at === -1 ? 0 : next]!.focus();
+        rows[at === -1 ? 0 : next]!.scrollIntoView({ block: "nearest" });
+        e.preventDefault();
         return;
       }
       if (Date.now() - pendingG < 1000) {

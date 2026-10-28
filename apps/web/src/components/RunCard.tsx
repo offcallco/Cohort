@@ -35,7 +35,7 @@ export function RunCard({ run, onChange }: { run: Run; onChange: () => void }) {
           <StatusPill tone="idle" icon="clock" label="Queued" />
         )}
       </div>
-      <Link to={run.taskHref} className="run-task">
+      <Link to={run.taskHref} className="run-task" data-row>
         {run.task}
       </Link>
       <p className="run-phase">{run.phase}</p>

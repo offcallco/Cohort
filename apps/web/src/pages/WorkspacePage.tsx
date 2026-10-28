@@ -7,6 +7,8 @@ import { Form } from "../components/Form.tsx";
 import { NameFields, useNameFields } from "../components/NameFields.tsx";
 import { useApi } from "../hooks.ts";
 import { timeAgo } from "../format.ts";
+import { SkeletonRows } from "../components/Skeleton.tsx";
+import { ErrorState } from "../components/States.tsx";
 
 export function WorkspacePage() {
   const { workspace = "" } = useParams();
@@ -15,8 +17,8 @@ export function WorkspacePage() {
   const [search, setSearch] = useSearchParams();
   const tab = search.get("tab") === "issues" ? "issues" : "projects";
 
-  if (error) return <p className="error">{error}</p>;
-  if (!data) return null;
+  if (error) return <ErrorState what="this workspace" error={error} />;
+  if (!data) return <SkeletonRows rows={3} height={56} />;
   const w = data.workspace;
 
   return (
@@ -88,8 +90,8 @@ function ProjectList({
 
 function WorkspaceIssues({ workspace }: { workspace: string }) {
   const { data, error } = useApi<{ issues: IssueSummary[] }>(`/api/workspaces/${workspace}/issues?status=open`);
-  if (error) return <p className="error">{error}</p>;
-  if (!data) return null;
+  if (error) return <ErrorState what="the open issues" error={error} />;
+  if (!data) return <SkeletonRows rows={3} height={56} />;
   if (data.issues.length === 0) {
     return (
       <section className="panel empty">

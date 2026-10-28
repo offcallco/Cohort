@@ -83,3 +83,29 @@ describe("story endpoint", () => {
     ]);
   });
 });
+
+describe("activity", () => {
+  let app: App;
+  let cleanup: () => Promise<void>;
+  let cookie: string;
+  beforeAll(async () => {
+    ({ app, cleanup } = await createTestApp());
+    ({ cookie } = await signUp(app));
+    const post = (url: string, payload: object) => app.inject({ method: "POST", url, payload, headers: { cookie } });
+    await post("/api/workspaces", { name: "Acme", slug: "acme" });
+    await post("/api/workspaces/acme/projects", { name: "API", slug: "api", initReadme: true });
+    await post("/api/projects/acme/api/issues", { title: "First" });
+    await post("/api/projects/acme/api/issues/1/comments", { body: "On it\nmore detail" });
+  });
+  afterAll(() => cleanup());
+
+  it("lists who did what, newest first, filtered by actor and repo", async () => {
+    const get = async (q = "") => (await app.inject({ url: `/api/activity${q}`, headers: { cookie } })).json().entries as { actor: string; text: string; href: string }[];
+    const all = await get();
+    // Both can land in the same millisecond, so don't depend on their order.
+    expect(all.map((e) => e.text).sort()).toEqual(["commented on #1: On it", "opened #1 First"]);
+    expect(all.find((e) => e.text.startsWith("commented"))).toMatchObject({ actor: "justin", bot: false, project: "acme/api", href: "/acme/api/issues/1" });
+    expect(await get("?actor=agents")).toEqual([]);
+    expect(await get("?project=acme/other")).toEqual([]);
+  });
+});

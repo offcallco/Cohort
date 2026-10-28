@@ -4,6 +4,8 @@ import { shortSha, timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
 import { useProject } from "./ProjectLayout.tsx";
 import { RefPicker } from "./RefPicker.tsx";
+import { SkeletonRows } from "../../components/Skeleton.tsx";
+import { ErrorState } from "../../components/States.tsx";
 
 export function CommitsView() {
   const { project, base, ref } = useProject();
@@ -21,8 +23,8 @@ export function CommitsView() {
     setSearch(next);
   };
 
-  if (error) return <p className="error">{error}</p>;
-  if (!data) return null;
+  if (error) return <ErrorState what="the commits" error={error} />;
+  if (!data) return <SkeletonRows rows={6} height={44} />;
 
   return (
     <>

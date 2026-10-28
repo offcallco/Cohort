@@ -56,7 +56,7 @@ export function ReposPage() {
                 .map((r) => (
                   <li key={r.slug}>
                     <div className="repo-main">
-                      <Link to={`/${r.workspace}/${r.slug}`} className="repo-name">
+                      <Link to={`/${r.workspace}/${r.slug}`} className="repo-name" data-row>
                         {r.name}
                       </Link>
                       {r.description && <span className="muted">{r.description}</span>}

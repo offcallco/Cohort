@@ -5,6 +5,8 @@ import { api } from "../../api.ts";
 import { IssueRow, LabelChip } from "../../components/IssueBits.tsx";
 import { useApi } from "../../hooks.ts";
 import { useProject } from "./ProjectLayout.tsx";
+import { SkeletonRows } from "../../components/Skeleton.tsx";
+import { ErrorState } from "../../components/States.tsx";
 
 const BOARD_ORDER: IssueStatus[] = ["todo", "in_progress", "review", "blocked", "done"];
 
@@ -80,7 +82,8 @@ export function IssuesView() {
         </Link>
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && <ErrorState what="the issues" error={error} />}
+      {!data && !error && <SkeletonRows rows={5} height={52} />}
       {data &&
         (view === "board" ? (
           <Board issues={data.issues} apiBase={apiBase} onChange={reload} />

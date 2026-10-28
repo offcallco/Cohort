@@ -86,7 +86,7 @@ export function AgentsPage() {
                     <JobStatusPill status={j.status} />
                   </td>
                   <td>
-                    <Link to={`/${j.project}/jobs/${j.id}`}>{j.issue?.title ?? (j.workshop ? `Workshop #${j.workshop}` : `Run #${j.id}`)}</Link>
+                    <Link to={`/${j.project}/jobs/${j.id}`} data-row>{j.issue?.title ?? (j.workshop ? `Workshop #${j.workshop}` : `Run #${j.id}`)}</Link>
                     <div className="muted small">
                       {JOB_KIND_LABELS[j.kind]} · <span className="mono">{j.project}</span>
                     </div>
