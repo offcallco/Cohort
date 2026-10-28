@@ -1,9 +1,18 @@
 import { Link } from "react-router";
 import { STATUS_LABELS, type IssueRef, type IssueStatus, type IssueSummary, type Label } from "@cohort/shared";
 import { timeAgo } from "../format.ts";
+import { StatusPill, type Tone } from "./StatusPill.tsx";
+
+const ISSUE_TONES: Record<IssueStatus, Tone> = {
+  todo: "idle",
+  in_progress: "running",
+  review: "waiting",
+  done: "passed",
+  blocked: "failed",
+};
 
 export function StatusBadge({ status }: { status: IssueStatus }) {
-  return <span className={`status status-${status}`}>{STATUS_LABELS[status]}</span>;
+  return <StatusPill tone={ISSUE_TONES[status]} label={STATUS_LABELS[status]} />;
 }
 
 export function LabelChip({ label, onRemove }: { label: Pick<Label, "name" | "color">; onRemove?: () => void }) {

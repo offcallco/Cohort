@@ -47,7 +47,7 @@ export function AllIssuesPage() {
   return (
     <>
       <div className="page-head">
-        <h1>Issues</h1>
+        <h1>Work</h1>
         {data && (
           <span className="muted">
             {data.issues.length} {data.issues.length === 1 ? "issue" : "issues"}

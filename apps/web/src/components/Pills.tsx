@@ -1,4 +1,5 @@
 import type { JobKind, JobStatus, MergeRequestStatus } from "@cohort/shared";
+import { StatusPill, type Tone } from "./StatusPill.tsx";
 
 export const JOB_KIND_LABELS: Record<JobKind, string> = {
   implement: "Implement",
@@ -7,13 +8,12 @@ export const JOB_KIND_LABELS: Record<JobKind, string> = {
   workshop: "Workshop turn",
 };
 
-// Reuses the issue status colors for jobs and merge requests.
-const jobTone: Record<JobStatus, string> = {
-  queued: "todo",
-  running: "in_progress",
-  succeeded: "done",
-  failed: "blocked",
-  canceled: "todo",
+const jobTone: Record<JobStatus, Tone> = {
+  queued: "idle",
+  running: "running",
+  succeeded: "passed",
+  failed: "failed",
+  canceled: "idle",
 };
 const jobLabel: Record<JobStatus, string> = {
   queued: "Queued",
@@ -24,12 +24,13 @@ const jobLabel: Record<JobStatus, string> = {
 };
 
 export function JobStatusPill({ status }: { status: JobStatus }) {
-  return <span className={`status status-${jobTone[status]}`}>{jobLabel[status]}</span>;
+  return <StatusPill tone={jobTone[status]} label={jobLabel[status]} icon={status === "queued" ? "clock" : undefined} />;
 }
 
-const mrTone: Record<MergeRequestStatus, string> = { open: "in_progress", merged: "review", closed: "blocked" };
-const mrLabel: Record<MergeRequestStatus, string> = { open: "Open", merged: "Merged", closed: "Closed" };
+// An open merge request is waiting on a person to review it.
+const mrTone: Record<MergeRequestStatus, Tone> = { open: "waiting", merged: "passed", closed: "idle" };
+const mrLabel: Record<MergeRequestStatus, string> = { open: "Needs review", merged: "Merged", closed: "Closed" };
 
 export function MergeRequestPill({ status }: { status: MergeRequestStatus }) {
-  return <span className={`status status-${mrTone[status]}`}>{mrLabel[status]}</span>;
+  return <StatusPill tone={mrTone[status]} label={mrLabel[status]} />;
 }

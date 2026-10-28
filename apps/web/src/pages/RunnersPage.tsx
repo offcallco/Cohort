@@ -4,6 +4,7 @@ import { api } from "../api.ts";
 import { Form } from "../components/Form.tsx";
 import { timeAgo } from "../format.ts";
 import { useApi } from "../hooks.ts";
+import { StatusPill } from "../components/StatusPill.tsx";
 
 export function RunnersPage() {
   const { data, error, reload } = useApi<{ runners: Runner[] }>("/api/runners", { pollMs: 5000 });
@@ -55,7 +56,7 @@ limit = 2`
             <li key={b.id} className="row wrap">
               <strong>{b.username}</strong>
               <span className="muted small">{b.agentType}</span>
-              <span className={`status status-${b.available ? "done" : "todo"}`}>{b.available ? "Available" : "No runner online"}</span>
+              <StatusPill tone={b.available ? "passed" : "idle"} label={b.available ? "Available" : "No runner online"} />
             </li>
           ))}
         </ul>
@@ -70,7 +71,7 @@ limit = 2`
             {data?.runners.map((r) => (
               <li key={r.id} className="list-row">
                 <div>
-                  <strong>{r.name}</strong> <span className={`status status-${r.online ? "done" : "todo"}`}>{r.online ? "Online" : "Offline"}</span>
+                  <strong>{r.name}</strong> <StatusPill tone={r.online ? "passed" : "idle"} label={r.online ? "Online" : "Offline"} />
                   <div className="muted small">
                     {r.online
                       ? `${r.agents.map((a) => `${a.name} (${a.type}, ${a.limit} at once)`).join(", ") || "No agents"}${r.ci ? " · CI" : ""} · ${r.runningJobs} of ${r.concurrent} slots busy`

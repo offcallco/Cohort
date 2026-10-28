@@ -1,15 +1,16 @@
 import { Link } from "react-router";
 import type { CiJobStatus, PipelineStatus, PipelineSummary } from "@cohort/shared";
+import { StatusPill, type Tone } from "./StatusPill.tsx";
 
-const tone: Record<PipelineStatus | CiJobStatus, string> = {
-  manual: "review",
-  pending: "todo",
-  created: "todo",
-  running: "in_progress",
-  success: "done",
-  failed: "blocked",
-  canceled: "todo",
-  skipped: "todo",
+const tone: Record<PipelineStatus | CiJobStatus, Tone> = {
+  manual: "waiting",
+  pending: "idle",
+  created: "idle",
+  running: "running",
+  success: "passed",
+  failed: "failed",
+  canceled: "idle",
+  skipped: "idle",
 };
 const label: Record<PipelineStatus | CiJobStatus, string> = {
   manual: "Waiting to run",
@@ -23,7 +24,8 @@ const label: Record<PipelineStatus | CiJobStatus, string> = {
 };
 
 export function PipelineStatusPill({ status }: { status: PipelineStatus | CiJobStatus }) {
-  return <span className={`status status-${tone[status]}`}>{label[status]}</span>;
+  const icon = status === "pending" || status === "created" ? "clock" : status === "manual" ? "clock" : undefined;
+  return <StatusPill tone={tone[status]} label={label[status]} icon={icon} />;
 }
 
 export function PipelineLink({ base, pipeline }: { base: string; pipeline: PipelineSummary }) {
