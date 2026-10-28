@@ -1,4 +1,11 @@
-import type { JobStatus, MergeRequestStatus } from "@cohort/shared";
+import type { JobKind, JobStatus, MergeRequestStatus } from "@cohort/shared";
+
+export const JOB_KIND_LABELS: Record<JobKind, string> = {
+  implement: "Implement",
+  split: "Plan the split",
+  resolve: "Resolve conflict",
+  workshop: "Workshop turn",
+};
 
 // Reuses the issue status colors for jobs and merge requests.
 const jobTone: Record<JobStatus, string> = {

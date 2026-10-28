@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { Job } from "@cohort/shared";
 import { api } from "../../api.ts";
-import { JobStatusPill } from "../../components/Pills.tsx";
+import { JOB_KIND_LABELS, JobStatusPill } from "../../components/Pills.tsx";
 import { timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
 import { useProject } from "./ProjectLayout.tsx";
@@ -49,6 +49,7 @@ export function AgentPanel({ issueNumber, onChange }: { issueNumber: number; onC
       <div className="row spread">
         <div className="row wrap">
           <strong>{job.bot}</strong>
+          <span className="muted small">{JOB_KIND_LABELS[job.kind]}</span>
           <JobStatusPill status={job.status} />
           <Link to={`${base}/jobs/${job.id}`} className="small">
             Job #{job.id} log
@@ -69,10 +70,17 @@ export function AgentPanel({ issueNumber, onChange }: { issueNumber: number; onC
       </div>
       <div className="muted small">
         {job.status === "queued" && (job.waitingReason ?? "Waiting for a runner")}
-        {job.status === "running" && `Working on ${job.branch} on ${job.runner ?? "a runner"} · started ${timeAgo(job.startedAt!)}`}
+        {job.status === "running" &&
+          `${
+            job.kind === "split"
+              ? "Reading the code to decide whether to split this issue"
+              : job.kind === "resolve"
+                ? `Resolving a merge conflict into ${job.branch}`
+                : `Working on ${job.branch}`
+          } on ${job.runner ?? "a runner"} · started ${timeAgo(job.startedAt!)}`}
         {job.status === "succeeded" && (
           <>
-            Finished {timeAgo(job.finishedAt!)}
+            {JOB_KIND_LABELS[job.kind]} finished {timeAgo(job.finishedAt!)}
             {job.mergeRequest && (
               <>
                 {" · "}

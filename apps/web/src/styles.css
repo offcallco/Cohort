@@ -1086,3 +1086,12 @@ button.link.small {
     max-height: none;
   }
 }
+
+/* Phase 6: splitting */
+
+.split-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.2rem;
+}

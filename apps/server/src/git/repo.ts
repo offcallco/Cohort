@@ -319,3 +319,13 @@ export async function deleteBranch(gitDir: string, branch: string) {
   if (!isSafeRef(branch)) return;
   await gitWithCode(gitDir, ["update-ref", "-d", `refs/heads/${branch}`]);
 }
+
+// Creates `name` at `from`'s current commit. Does nothing if `name` already exists.
+export async function createBranch(gitDir: string, name: string, from: string) {
+  if (!isSafeRef(name)) throw new GitError(`Invalid branch name "${name}"`);
+  if (await branchSha(gitDir, name)) return;
+  const sha = await branchSha(gitDir, from);
+  if (!sha) throw new GitError(`Branch "${from}" not found`);
+  const { code, stderr } = await gitWithCode(gitDir, ["update-ref", `refs/heads/${name}`, sha, ""]);
+  if (code !== 0 && !(await branchSha(gitDir, name))) throw new GitError(stderr.trim());
+}

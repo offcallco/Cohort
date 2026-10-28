@@ -4,7 +4,7 @@ import type { JobSpec, RunnerMessage, ServerMessage } from "@cohort/shared";
 import type { AgentAdapter } from "./agents/index.ts";
 import type { RunnerConfig } from "./config.ts";
 import { KeyedLock } from "./git.ts";
-import { runImplementJob } from "./job.ts";
+import { runImplementJob, runResolveJob, runSplitJob } from "./job.ts";
 import { removeWorkshop, runWorkshopTurn } from "./workshop.ts";
 
 const version = (JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")) as { version: string })
@@ -153,9 +153,7 @@ export class RunnerClient {
     this.send({ type: "started", jobId: spec.id });
     const what = spec.workshop
       ? `workshop ${spec.workshop.id} (${spec.workshop.mode})`
-      : spec.issue
-        ? `#${spec.issue.number} ${spec.issue.title}`
-        : spec.branch;
+      : `${spec.kind}${spec.issue ? ` #${spec.issue.number} ${spec.issue.title}` : ""}`;
     this.logger.info(`Job ${spec.id}: ${what} (${adapter.name})`);
 
     const log = (text: string) => {
@@ -167,12 +165,14 @@ export class RunnerClient {
       serverUrl: this.config.url,
       dataDir: this.config.dataDir,
       instructions: this.config.context.instructions,
+      split: this.config.split,
       adapter,
       signal: abort.signal,
       log,
       locks: this.locks,
     };
-    const run = spec.kind === "workshop" ? runWorkshopTurn(spec, context) : runImplementJob(spec, context);
+    const runners = { implement: runImplementJob, workshop: runWorkshopTurn, split: runSplitJob, resolve: runResolveJob };
+    const run = runners[spec.kind](spec, context);
     job.done = run.then((outcome) => {
       this.flush(job);
       this.active.delete(spec.id);

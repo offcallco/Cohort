@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import type { Job } from "@cohort/shared";
-import { JobStatusPill } from "../../components/Pills.tsx";
+import { JOB_KIND_LABELS, JobStatusPill } from "../../components/Pills.tsx";
 import { timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
 import { useProject } from "./ProjectLayout.tsx";
@@ -27,7 +27,7 @@ export function JobsView() {
         {data.jobs.map((j) => (
           <li key={j.id} className="list-row">
             <div>
-              <Link to={`${base}/jobs/${j.id}`}>Job #{j.id}</Link>
+              <Link to={`${base}/jobs/${j.id}`}>Job #{j.id}</Link> <span className="muted small">{JOB_KIND_LABELS[j.kind]}</span>
               {j.issue && (
                 <>
                   {" · "}
@@ -37,7 +37,8 @@ export function JobsView() {
                 </>
               )}
               <div className="muted small">
-                {j.bot} · {j.branch} · created {timeAgo(j.createdAt)}
+                {j.bot}
+                {j.branch && ` · ${j.branch}`} · created {timeAgo(j.createdAt)}
                 {j.status === "queued" && j.waitingReason && <> · {j.waitingReason}</>}
               </div>
             </div>

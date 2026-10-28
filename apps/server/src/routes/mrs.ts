@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
-import type { Db } from "@cohort/db";
+import { eq } from "drizzle-orm";
+import { issues, type Db } from "@cohort/db";
 import {
   createCommentBody,
   createMergeRequestBody,
@@ -93,6 +94,9 @@ export async function mergeRequestRoutes(
     if (!body) return;
     try {
       const merged = await mergeMergeRequest(db, reposRoot, row, request.user!, body.deleteSourceBranch);
+      // Unblock issues that waited on this one, and finish its parent.
+      const issue = merged.issueId ? db.select().from(issues).where(eq(issues.id, merged.issueId)).get() : undefined;
+      if (issue) await jobs.flow.issueDone(issue);
       return detail(merged);
     } catch (e) {
       if (e instanceof MergeConflictError) return reply.code(409).send({ error: e.message });

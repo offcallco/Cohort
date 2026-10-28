@@ -99,6 +99,14 @@ export const issues = sqliteTable(
     status: text("status", { enum: ISSUE_STATUSES }).notNull().default("todo"),
     parentId: integer("parent_id").references((): AnySQLiteColumn => issues.id, { onDelete: "set null" }),
     assigneeId: integer("assignee_id").references(() => users.id, { onDelete: "set null" }),
+    // Where the issue came from. Sub-issues an agent split off ("split") build on their
+    // parent's branch instead of opening their own merge request.
+    origin: text("origin", { enum: ["user", "workshop", "split"] }).notNull().default("user"),
+    // Branch the issue's work happens on, once an agent has started it.
+    branch: text("branch"),
+    // A split waiting for approval because it's over the runner's max_subtasks:
+    // JSON { issues: ProposedIssue[], limit: number }.
+    splitProposal: text("split_proposal"),
     authorId: integer("author_id")
       .notNull()
       .references(() => users.id),
@@ -178,7 +186,9 @@ export const jobs = sqliteTable("jobs", {
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
   issueId: integer("issue_id").references(() => issues.id, { onDelete: "set null" }),
-  kind: text("kind", { enum: ["implement", "workshop"] }).notNull(),
+  // "split" asks the agent how to break an issue up; "resolve" fixes a conflict merging a
+  // sub-issue's branch into its parent's (branch = parent's branch, baseBranch = sub-issue's).
+  kind: text("kind", { enum: ["implement", "workshop", "split", "resolve"] }).notNull(),
   workshopId: integer("workshop_id").references((): AnySQLiteColumn => workshops.id, { onDelete: "cascade" }),
   // Workshop jobs: a normal interview turn, or the final turn that proposes issues.
   workshopMode: text("workshop_mode", { enum: ["turn", "finalize"] }),

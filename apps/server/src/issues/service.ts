@@ -224,6 +224,9 @@ export function issueDetail(db: Db, row: IssueRow): IssueDetail {
   return {
     ...summary!,
     body: row.body,
+    origin: row.origin,
+    branch: row.branch,
+    splitProposal: row.splitProposal ? (JSON.parse(row.splitProposal) as IssueDetail["splitProposal"]) : null,
     author: people.get(row.authorId)!,
     parentIssue: parent ? ref(parent) : null,
     childIssues: refsWhere(eq(issues.parentId, row.id)),
@@ -320,6 +323,7 @@ export function createIssue(
   projectId: number,
   authorId: number,
   body: Required<CreateIssueBody>,
+  origin: IssueRow["origin"] = "user",
 ): IssueRow {
   return db.transaction((tx) => {
     const next = (tx.select({ n: max(issues.number) }).from(issues).where(eq(issues.projectId, projectId)).get()?.n ?? 0) + 1;
@@ -331,6 +335,7 @@ export function createIssue(
         title: body.title,
         body: body.body,
         status: body.status,
+        origin,
         authorId,
         assigneeId: userIdFor(tx, body.assignee),
       })
