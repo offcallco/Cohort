@@ -294,8 +294,9 @@ export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancele
 export interface Job {
   id: number;
   project: string;
-  kind: "implement";
+  kind: "implement" | "workshop";
   issue: IssueRef | null;
+  workshop: number | null;
   bot: string;
   agentType: AgentType;
   status: JobStatus;
@@ -352,4 +353,65 @@ export interface MergeRequestDetail extends MergeRequestSummary {
   jobs: Job[];
   mergeSha: string | null;
   mergedAt: string | null;
+}
+
+// Plan workshops
+
+export const createWorkshopBody = z.object({
+  idea: z.string().trim().min(1, "Describe your idea").max(20_000),
+  bot: z.string().min(1, "Pick an agent"),
+  title: z.string().trim().max(120).optional(),
+});
+
+export const workshopMessageBody = z.object({
+  body: z.string().trim().min(1, "Message can't be empty").max(20_000),
+});
+
+export const proposedIssue = z.object({
+  // Short id used to refer to this issue in dependsOn.
+  key: z.string().trim().min(1).max(40),
+  title: z.string().trim().min(1, "Every issue needs a title").max(255),
+  body: z.string().max(100_000).default(""),
+  labels: z.array(z.string().trim().min(1).max(50)).max(20).default([]),
+  dependsOn: z.array(z.string()).max(50).default([]),
+});
+export type ProposedIssue = z.infer<typeof proposedIssue>;
+
+export const createWorkshopIssuesBody = z.object({
+  issues: z.array(proposedIssue).min(1, "Keep at least one issue").max(50),
+  // Also create a parent issue holding the plan, with the others as its sub-issues.
+  parentIssue: z.boolean().default(true),
+});
+
+export type WorkshopStatus = "active" | "done" | "closed";
+
+export interface WorkshopMessage {
+  id: number;
+  role: "user" | "agent" | "system";
+  body: string;
+  createdAt: string;
+}
+
+export interface WorkshopSummary {
+  id: number;
+  project: string;
+  title: string;
+  status: WorkshopStatus;
+  bot: string;
+  messages: number;
+  // True while the agent is working on (or queued for) a reply.
+  waiting: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkshopDetail extends WorkshopSummary {
+  baseBranch: string;
+  plan: string;
+  proposal: ProposedIssue[] | null;
+  messageList: WorkshopMessage[];
+  // The agent's current or most recent turn.
+  job: Job | null;
+  parentIssue: IssueRef | null;
+  createdIssues: IssueRef[];
 }

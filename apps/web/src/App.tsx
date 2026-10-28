@@ -22,6 +22,9 @@ import { NewMergeRequestView } from "./pages/project/NewMergeRequestView.tsx";
 import { MergeRequestView } from "./pages/project/MergeRequestView.tsx";
 import { SettingsView } from "./pages/project/SettingsView.tsx";
 import { RunnersPage } from "./pages/RunnersPage.tsx";
+import { WorkshopsView } from "./pages/project/WorkshopsView.tsx";
+import { NewWorkshopView } from "./pages/project/NewWorkshopView.tsx";
+import { WorkshopView } from "./pages/project/WorkshopView.tsx";
 
 export function App() {
   const { status, error } = useSession();
@@ -75,6 +78,9 @@ export function App() {
           <Route path="merge_requests" element={<MergeRequestsView />} />
           <Route path="merge_requests/new" element={<NewMergeRequestView />} />
           <Route path="merge_requests/:number" element={<MergeRequestView />} />
+          <Route path="workshops" element={<WorkshopsView />} />
+          <Route path="workshops/new" element={<NewWorkshopView />} />
+          <Route path="workshops/:id" element={<WorkshopView />} />
           <Route path="jobs" element={<JobsView />} />
           <Route path="jobs/:id" element={<JobView />} />
           <Route path="settings" element={<SettingsView />} />

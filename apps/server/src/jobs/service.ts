@@ -12,7 +12,7 @@ import {
   workspaces,
   type Db,
 } from "@cohort/db";
-import type { Job, JobSpec } from "@cohort/shared";
+import type { Job, JobSpec, WorkshopTurn } from "@cohort/shared";
 import { botEmail, findBot } from "../bots.ts";
 import { branchSha, defaultBranch, repoDir } from "../git/repo.ts";
 import { slugify } from "../slug.ts";
@@ -32,8 +32,25 @@ export interface Dispatcher {
 
 export const ACTIVE = ["queued", "running"] as const;
 
+export interface JobResult {
+  status: "succeeded" | "failed" | "canceled";
+  summary?: string;
+  error?: string;
+  commitSha?: string;
+  sessionId?: string;
+}
+
+// Implemented by the workshop service, which owns what workshop jobs mean.
+export interface WorkshopHooks {
+  spec(job: JobRow): WorkshopTurn;
+  finished(job: JobRow, result: JobResult): Promise<void>;
+  preferredRunner(job: JobRow): number | null;
+  retry(job: JobRow): JobRow;
+}
+
 export class Jobs {
   dispatcher: Dispatcher | null = null;
+  workshops: WorkshopHooks | null = null;
 
   constructor(
     readonly db: Db,
@@ -124,6 +141,7 @@ export class Jobs {
 
   async retry(job: JobRow): Promise<JobRow> {
     if (job.status === "queued" || job.status === "running") throw new JobError("This job is still active");
+    if (job.kind === "workshop") return this.workshops!.retry(job);
     const issue = job.issueId ? this.db.select().from(issues).where(eq(issues.id, job.issueId)).get() : undefined;
     if (!issue) throw new JobError("The issue for this job no longer exists");
     const next = await this.enqueueForIssue(issue, job.botId);
@@ -170,10 +188,16 @@ export class Jobs {
       issue: issue ? { number: issue.number, title: issue.title, body: issue.body, labels: labelNames } : null,
       context,
       bot: { name: bot.username, email: botEmail(bot.username) },
+      workshop: job.kind === "workshop" ? this.workshops!.spec(job) : undefined,
     };
   }
 
+  preferredRunner(job: JobRow) {
+    return job.kind === "workshop" ? (this.workshops?.preferredRunner(job) ?? null) : null;
+  }
+
   async branchExists(job: JobRow) {
+    if (!job.branch) return false;
     const { workspace, project } = this.projectPath(job.projectId);
     return (await branchSha(repoDir(this.reposRoot, workspace, project), job.branch)) !== null;
   }
@@ -189,7 +213,7 @@ export class Jobs {
     const job = this.get(jobId)!;
     const runner = this.db.select({ name: runners.name }).from(runners).where(eq(runners.id, runnerId)).get();
     this.logs.append(jobId, `Assigned to runner ${runner?.name ?? runnerId}\n`);
-    if (job.issueId) this.setIssueStatus(job.issueId, "in_progress");
+    if (job.issueId && job.kind === "implement") this.setIssueStatus(job.issueId, "in_progress");
     this.emitStatus(job);
   }
 
@@ -208,10 +232,7 @@ export class Jobs {
   }
 
   // Records the outcome, opens or updates the merge request, and updates the issue.
-  async finish(
-    jobId: number,
-    result: { status: "succeeded" | "failed" | "canceled"; summary?: string; error?: string; commitSha?: string },
-  ) {
+  async finish(jobId: number, result: JobResult) {
     const job = this.get(jobId);
     if (!job || (job.status !== "queued" && job.status !== "running")) return;
     this.db
@@ -227,6 +248,13 @@ export class Jobs {
       .where(eq(jobs.id, jobId))
       .run();
     this.logs.append(jobId, `\nJob ${result.status}${result.error ? `: ${result.error}` : ""}\n`);
+
+    if (job.kind === "workshop") {
+      await this.workshops?.finished({ ...job, runnerId: job.runnerId }, result);
+      this.emitStatus(this.get(jobId)!);
+      this.dispatcher?.dispatch();
+      return;
+    }
 
     const issue = job.issueId ? this.db.select().from(issues).where(eq(issues.id, job.issueId)).get() : undefined;
     if (issue && result.status === "succeeded") {
@@ -297,6 +325,7 @@ export class Jobs {
       project: `${workspace}/${project}`,
       kind: job.kind,
       issue: issue ? { number: issue.number, title: issue.title, status: issue.status } : null,
+      workshop: job.workshopId,
       bot: bot?.username ?? "",
       agentType: job.agentType,
       status: job.status,

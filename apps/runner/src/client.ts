@@ -5,6 +5,7 @@ import type { AgentAdapter } from "./agents/index.ts";
 import type { RunnerConfig } from "./config.ts";
 import { KeyedLock } from "./git.ts";
 import { runImplementJob } from "./job.ts";
+import { removeWorkshop, runWorkshopTurn } from "./workshop.ts";
 
 const version = (JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8")) as { version: string })
   .version;
@@ -86,6 +87,9 @@ export class RunnerClient {
       if (message.type === "welcome") this.logger.info(`Connected to ${this.config.url} as runner "${message.name}"`);
       else if (message.type === "assign") this.accept(message.job);
       else if (message.type === "cancel") this.active.get(message.jobId)?.abort.abort();
+      else if (message.type === "workshop_closed") {
+        void removeWorkshop(this.config.dataDir, message.workshopId, this.locks).catch(() => undefined);
+      }
     });
 
     socket.on("unexpected-response", (_req, res) => {
@@ -147,14 +151,19 @@ export class RunnerClient {
     const job: ActiveJob = { spec, abort, buffer: "", timer: null, done: Promise.resolve() };
     this.active.set(spec.id, job);
     this.send({ type: "started", jobId: spec.id });
-    this.logger.info(`Job ${spec.id}: ${spec.issue ? `#${spec.issue.number} ${spec.issue.title}` : spec.branch} (${adapter.name})`);
+    const what = spec.workshop
+      ? `workshop ${spec.workshop.id} (${spec.workshop.mode})`
+      : spec.issue
+        ? `#${spec.issue.number} ${spec.issue.title}`
+        : spec.branch;
+    this.logger.info(`Job ${spec.id}: ${what} (${adapter.name})`);
 
     const log = (text: string) => {
       job.buffer += text;
       job.timer ??= setTimeout(() => this.flush(job), LOG_FLUSH_MS);
     };
 
-    job.done = runImplementJob(spec, {
+    const context = {
       serverUrl: this.config.url,
       dataDir: this.config.dataDir,
       instructions: this.config.context.instructions,
@@ -162,7 +171,9 @@ export class RunnerClient {
       signal: abort.signal,
       log,
       locks: this.locks,
-    }).then((outcome) => {
+    };
+    const run = spec.kind === "workshop" ? runWorkshopTurn(spec, context) : runImplementJob(spec, context);
+    job.done = run.then((outcome) => {
       this.flush(job);
       this.active.delete(spec.id);
       this.logger.info(`Job ${spec.id}: ${outcome.status}${outcome.error ? ` (${outcome.error})` : ""}`);

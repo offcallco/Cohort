@@ -178,7 +178,10 @@ export const jobs = sqliteTable("jobs", {
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
   issueId: integer("issue_id").references(() => issues.id, { onDelete: "set null" }),
-  kind: text("kind", { enum: ["implement"] }).notNull(),
+  kind: text("kind", { enum: ["implement", "workshop"] }).notNull(),
+  workshopId: integer("workshop_id").references((): AnySQLiteColumn => workshops.id, { onDelete: "cascade" }),
+  // Workshop jobs: a normal interview turn, or the final turn that proposes issues.
+  workshopMode: text("workshop_mode", { enum: ["turn", "finalize"] }),
   botId: integer("bot_id")
     .notNull()
     .references(() => users.id),
@@ -236,6 +239,48 @@ export const mergeRequestComments = sqliteTable("merge_request_comments", {
   authorId: integer("author_id")
     .notNull()
     .references(() => users.id),
+  body: text("body").notNull(),
+  createdAt: createdAt(),
+});
+
+export const WORKSHOP_STATUSES = ["active", "done", "closed"] as const;
+
+// A plan workshop: an agent interviews the user about an idea, keeps a plan document up to
+// date, and finally proposes issues.
+export const workshops = sqliteTable("workshops", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  status: text("status", { enum: WORKSHOP_STATUSES }).notNull().default("active"),
+  botId: integer("bot_id")
+    .notNull()
+    .references(() => users.id),
+  // Branch the agent reads while interviewing.
+  baseBranch: text("base_branch").notNull(),
+  plan: text("plan").notNull().default(""),
+  // JSON array of proposed issues, once the agent has proposed them.
+  proposal: text("proposal"),
+  // Agent session to resume, and the runner that holds it.
+  sessionId: text("session_id"),
+  sessionRunnerId: integer("session_runner_id").references(() => runners.id, { onDelete: "set null" }),
+  // Set when issues are created; the issue that holds the plan.
+  parentIssueId: integer("parent_issue_id").references(() => issues.id, { onDelete: "set null" }),
+  createdById: integer("created_by_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const workshopMessages = sqliteTable("workshop_messages", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  workshopId: integer("workshop_id")
+    .notNull()
+    .references(() => workshops.id, { onDelete: "cascade" }),
+  // "system" messages are Cohort's own notes, e.g. a failed turn.
+  role: text("role", { enum: ["user", "agent", "system"] }).notNull(),
   body: text("body").notNull(),
   createdAt: createdAt(),
 });

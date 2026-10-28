@@ -5,9 +5,23 @@ import { z } from "zod";
 export const AGENT_TYPES = ["claude-code", "codex", "command"] as const;
 export type AgentType = (typeof AGENT_TYPES)[number];
 
+export interface WorkshopTurn {
+  id: number;
+  title: string;
+  // "finalize" asks the agent for the final plan and a list of issues.
+  mode: "turn" | "finalize";
+  // Session to resume on this runner, if it has one.
+  sessionId: string | null;
+  // Every message so far, oldest first, for agents starting a fresh session.
+  transcript: { role: "user" | "agent" | "system"; body: string }[];
+  // The user's newest message (the idea itself on the first turn).
+  message: string;
+  plan: string;
+}
+
 export interface JobSpec {
   id: number;
-  kind: "implement";
+  kind: "implement" | "workshop";
   agent: AgentType;
   // "<workspace>/<project>"
   project: string;
@@ -24,6 +38,7 @@ export interface JobSpec {
   context: string;
   // Identity for commits the runner makes.
   bot: { name: string; email: string };
+  workshop?: WorkshopTurn;
 }
 
 const agentInfo = z.object({
@@ -51,6 +66,8 @@ export const runnerMessage = z.discriminatedUnion("type", [
     summary: z.string().optional(),
     error: z.string().optional(),
     commitSha: z.string().optional(),
+    // Workshop turns: the agent session, so the next turn can resume it.
+    sessionId: z.string().optional(),
   }),
   // The runner couldn't take an assigned job (no capacity, unknown agent); requeue it.
   z.object({ type: z.literal("rejected"), jobId: z.number().int(), reason: z.string() }),
@@ -60,4 +77,6 @@ export type RunnerMessage = z.infer<typeof runnerMessage>;
 export type ServerMessage =
   | { type: "welcome"; runnerId: number; name: string }
   | { type: "assign"; job: JobSpec }
-  | { type: "cancel"; jobId: number };
+  | { type: "cancel"; jobId: number }
+  // The workshop is over; its checkout can be removed.
+  | { type: "workshop_closed"; workshopId: number };

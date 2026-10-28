@@ -941,3 +941,148 @@ h1 .status {
   vertical-align: middle;
   font-size: 0.8rem;
 }
+
+/* Phase 5: plan workshops */
+
+.narrow-wide {
+  max-width: 720px;
+}
+
+.workshop-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.bubble {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.65rem 0.9rem;
+  max-width: 92%;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+
+.bubble p:first-child {
+  margin-top: 0;
+}
+
+.bubble p:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-user {
+  align-self: flex-end;
+  background: var(--notice-bg);
+  border-color: transparent;
+}
+
+.bubble-agent {
+  align-self: flex-start;
+}
+
+.bubble-system {
+  align-self: center;
+  background: none;
+  border-style: dashed;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.bubble-who {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.thinking .activity {
+  font: 0.8rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dots {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-right: 0.35rem;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dots {
+    animation: none;
+  }
+}
+
+.composer {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  position: sticky;
+  bottom: 0;
+  background: var(--bg);
+  padding: 0.5rem 0 0.75rem;
+}
+
+.plan-panel {
+  position: sticky;
+  top: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.proposal {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.proposal input {
+  padding: 0.3rem 0.5rem;
+  font-weight: 500;
+}
+
+button.link.small {
+  justify-self: start;
+  padding: 0;
+  color: var(--accent);
+}
+
+@media (max-width: 860px) {
+  .workshop-layout {
+    grid-template-columns: 1fr;
+  }
+  .plan-panel {
+    position: static;
+    max-height: none;
+  }
+}

@@ -30,6 +30,8 @@ export class RunnerHub implements Dispatcher {
   private readonly lostTimers = new Map<number, NodeJS.Timeout>();
   private readonly graceMs: number;
   private dispatching = false;
+  // Set on shutdown; late socket events must not touch the (soon closed) database.
+  private stopped = false;
   private redispatch = false;
 
   constructor(
@@ -48,6 +50,7 @@ export class RunnerHub implements Dispatcher {
   }
 
   stop() {
+    this.stopped = true;
     for (const timer of this.lostTimers.values()) clearTimeout(timer);
     for (const conn of this.connections.values()) conn.socket.close(1001, "Server shutting down");
   }
@@ -81,6 +84,7 @@ export class RunnerHub implements Dispatcher {
     let conn: Connection | null = null;
 
     socket.on("message", (data) => {
+      if (this.stopped) return;
       let message: RunnerMessage;
       try {
         message = runnerMessage.parse(JSON.parse(String(data)));
@@ -112,6 +116,7 @@ export class RunnerHub implements Dispatcher {
     });
 
     socket.on("close", () => {
+      if (this.stopped) return;
       if (conn && this.connections.get(runner.id) === conn) {
         this.connections.delete(runner.id);
         this.touch(runner.id);
@@ -210,29 +215,37 @@ export class RunnerHub implements Dispatcher {
   private async runDispatch() {
     const queued = this.db.select().from(jobs).where(eq(jobs.status, "queued")).orderBy(asc(jobs.id)).all();
     for (const job of queued) {
-      const conn = this.pickRunner(job.agentType);
+      const conn = this.pickRunner(job.agentType, this.jobs.preferredRunner(job));
       if (!conn) continue;
       const token = JOB_TOKEN_PREFIX + randomToken();
       conn.running.set(job.id, job.agentType);
       this.jobs.assigned(job.id, conn.runnerId, sha256(token));
-      const spec = this.jobs.spec(job, token);
-      spec.branchExists = await this.jobs.branchExists(job);
+      // Re-read: the spec depends on the runner it was just assigned to.
+      const assigned = this.jobs.get(job.id)!;
+      const spec = this.jobs.spec(assigned, token);
+      spec.branchExists = await this.jobs.branchExists(assigned);
       if (!this.connections.has(conn.runnerId)) continue;
       this.send(conn, { type: "assign", job: spec });
     }
   }
 
-  private pickRunner(agentType: JobRow["agentType"]): Connection | null {
+  // Least busy runner with a free slot for `agentType`, or `preferred` when it has one
+  // (workshop turns go back to the runner holding the agent's session).
+  private pickRunner(agentType: JobRow["agentType"], preferred: number | null = null): Connection | null {
     let best: Connection | null = null;
     for (const conn of this.connections.values()) {
       const agent = conn.agents.find((a) => a.type === agentType);
       if (!agent) continue;
       const ofAgent = [...conn.running.values()].filter((t) => t === agentType).length;
       if (conn.running.size >= conn.concurrent || ofAgent >= agent.limit) continue;
-      // Prefer the least busy runner.
+      if (conn.runnerId === preferred) return conn;
       if (!best || conn.running.size < best.running.size) best = conn;
     }
     return best;
+  }
+
+  broadcast(message: ServerMessage) {
+    for (const conn of this.connections.values()) this.send(conn, message);
   }
 
   cancel(job: JobRow): boolean {
