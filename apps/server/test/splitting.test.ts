@@ -123,6 +123,7 @@ beforeAll(async () => {
       agents: [agent],
       context: { instructions: "" },
       split: { max_subtasks: 4, max_depth: 1 },
+      ci: { enabled: false, timeout_minutes: 60 },
       dataDir: join(tmp, "runner"),
     },
     [createAdapter(agent)],

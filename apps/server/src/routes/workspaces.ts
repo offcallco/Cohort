@@ -33,6 +33,8 @@ export async function projectToApi(reposRoot: string, workspace: string, p: Proj
     clonePath: `/${workspace}/${p.slug}.git`,
     defaultBranch: await defaultBranch(repoDir(reposRoot, workspace, p.slug)),
     runnerContext: p.runnerContext,
+    pipelinesMustSucceed: p.pipelinesMustSucceed,
+    autoRunAgentPipelines: p.autoRunAgentPipelines,
   };
 }
 

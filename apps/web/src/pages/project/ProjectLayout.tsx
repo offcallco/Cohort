@@ -46,6 +46,7 @@ export function ProjectLayout() {
         <NavLink to={`${base}/workshops`}>Workshops</NavLink>
         <NavLink to={`${base}/issues`}>Issues</NavLink>
         <NavLink to={`${base}/merge_requests`}>Merge requests</NavLink>
+        <NavLink to={`${base}/pipelines`}>Pipelines</NavLink>
         <NavLink to={`${base}/jobs`}>Jobs</NavLink>
         {project.defaultBranch && (
           <>

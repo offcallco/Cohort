@@ -1,0 +1,19 @@
+# Cohort's own pipeline: run it by pushing this repo to a Cohort server.
+stages: [install, check]
+
+install:
+  stage: install
+  script:
+    - pnpm install --frozen-lockfile
+
+typecheck:
+  stage: check
+  script:
+    - pnpm install --frozen-lockfile --prefer-offline
+    - pnpm typecheck
+
+test:
+  stage: check
+  script:
+    - pnpm install --frozen-lockfile --prefer-offline
+    - pnpm test

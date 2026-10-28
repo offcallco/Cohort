@@ -15,6 +15,7 @@ import type { Job, JobSpec, WorkshopTurn } from "@cohort/shared";
 import { botEmail } from "../bots.ts";
 import { branchSha, defaultBranch, repoDir } from "../git/repo.ts";
 import { IssueFlow } from "./issueFlow.ts";
+import type { Pipelines } from "../pipelines/service.ts";
 import type { JobLogs } from "./logs.ts";
 
 type JobRow = typeof jobs.$inferSelect;
@@ -50,6 +51,7 @@ export interface WorkshopHooks {
 export class Jobs {
   dispatcher: Dispatcher | null = null;
   workshops: WorkshopHooks | null = null;
+  pipelines: Pipelines | null = null;
   // Issue jobs: splitting, sub-issues, dependencies and merge requests.
   readonly flow: IssueFlow;
 

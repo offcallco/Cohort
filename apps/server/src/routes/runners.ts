@@ -31,6 +31,7 @@ export async function runnerRoutes(app: FastifyInstance, { db, hub }: { db: Db; 
       agents: live?.agents ?? [],
       concurrent: live?.concurrent ?? null,
       runningJobs: live?.running ?? 0,
+      ci: live?.ci ?? false,
       lastSeenAt: r.lastSeenAt?.toISOString() ?? null,
       createdAt: r.createdAt.toISOString(),
     };

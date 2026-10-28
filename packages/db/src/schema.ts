@@ -72,6 +72,10 @@ export const projects = sqliteTable(
     description: text("description").notNull().default(""),
     // Extra instructions included in every agent job for this project.
     runnerContext: text("runner_context").notNull().default(""),
+    // Block merging until the merge request's pipeline has passed.
+    pipelinesMustSucceed: integer("pipelines_must_succeed", { mode: "boolean" }).notNull().default(false),
+    // Run pipelines for agents' merge requests without waiting for a person to start them.
+    autoRunAgentPipelines: integer("auto_run_agent_pipelines", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("projects_workspace_slug").on(t.workspaceId, t.slug)],
@@ -293,4 +297,51 @@ export const workshopMessages = sqliteTable("workshop_messages", {
   role: text("role", { enum: ["user", "agent", "system"] }).notNull(),
   body: text("body").notNull(),
   createdAt: createdAt(),
+});
+
+export const PIPELINE_STATUSES = ["manual", "pending", "running", "success", "failed", "canceled"] as const;
+export const CI_JOB_STATUSES = ["created", "pending", "running", "success", "failed", "canceled", "skipped"] as const;
+
+// A CI pipeline: the jobs in .cohort-ci.yml, run for one commit.
+export const pipelines = sqliteTable("pipelines", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  projectId: integer("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  ref: text("ref").notNull(),
+  sha: text("sha").notNull(),
+  // "manual" pipelines wait for a person to start them (e.g. agents' merge requests).
+  status: text("status", { enum: PIPELINE_STATUSES }).notNull(),
+  source: text("source", { enum: ["push", "merge_request", "web"] }).notNull(),
+  triggeredById: integer("triggered_by_id")
+    .notNull()
+    .references(() => users.id),
+  mergeRequestId: integer("merge_request_id").references(() => mergeRequests.id, { onDelete: "set null" }),
+  // Set when .cohort-ci.yml couldn't be read.
+  error: text("error"),
+  createdAt: createdAt(),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }),
+  finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+});
+
+export const pipelineJobs = sqliteTable("pipeline_jobs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  pipelineId: integer("pipeline_id")
+    .notNull()
+    .references(() => pipelines.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  stage: text("stage").notNull(),
+  stageIndex: integer("stage_index").notNull(),
+  // JSON string[] of commands, and JSON Record<string, string> of variables.
+  script: text("script").notNull(),
+  variables: text("variables").notNull().default("{}"),
+  allowFailure: integer("allow_failure", { mode: "boolean" }).notNull().default(false),
+  status: text("status", { enum: CI_JOB_STATUSES }).notNull().default("created"),
+  runnerId: integer("runner_id").references(() => runners.id, { onDelete: "set null" }),
+  // Read-only git credential for the job while it runs.
+  tokenHash: text("token_hash").unique(),
+  error: text("error"),
+  createdAt: createdAt(),
+  startedAt: integer("started_at", { mode: "timestamp_ms" }),
+  finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
 });

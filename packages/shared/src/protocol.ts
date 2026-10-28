@@ -47,6 +47,22 @@ export interface JobSpec {
   noSplit?: boolean;
 }
 
+// A CI job from .cohort-ci.yml, run with a shell on the runner.
+export interface CiJobSpec {
+  id: number;
+  pipelineId: number;
+  project: string;
+  clonePath: string;
+  // Read-only git credential for this job.
+  token: string;
+  ref: string;
+  sha: string;
+  name: string;
+  stage: string;
+  script: string[];
+  variables: Record<string, string>;
+}
+
 const agentInfo = z.object({
   name: z.string(),
   type: z.enum(AGENT_TYPES),
@@ -62,12 +78,17 @@ export const runnerMessage = z.discriminatedUnion("type", [
     agents: z.array(agentInfo),
     // Jobs the runner is still working on after a reconnect.
     running: z.array(z.number().int()).default([]),
+    // Whether this runner takes CI jobs, and the ones it's still running.
+    ci: z.boolean().default(false),
+    runningCi: z.array(z.number().int()).default([]),
   }),
-  z.object({ type: z.literal("started"), jobId: z.number().int() }),
-  z.object({ type: z.literal("log"), jobId: z.number().int(), text: z.string() }),
+  // `ci: true` marks messages about CI jobs, whose ids are separate from agent jobs'.
+  z.object({ type: z.literal("started"), jobId: z.number().int(), ci: z.boolean().optional() }),
+  z.object({ type: z.literal("log"), jobId: z.number().int(), text: z.string(), ci: z.boolean().optional() }),
   z.object({
     type: z.literal("finished"),
     jobId: z.number().int(),
+    ci: z.boolean().optional(),
     status: z.enum(["succeeded", "failed", "canceled"]),
     summary: z.string().optional(),
     error: z.string().optional(),
@@ -78,7 +99,7 @@ export const runnerMessage = z.discriminatedUnion("type", [
     maxSubtasks: z.number().int().optional(),
   }),
   // The runner couldn't take an assigned job (no capacity, unknown agent); requeue it.
-  z.object({ type: z.literal("rejected"), jobId: z.number().int(), reason: z.string() }),
+  z.object({ type: z.literal("rejected"), jobId: z.number().int(), reason: z.string(), ci: z.boolean().optional() }),
 ]);
 export type RunnerMessage = z.infer<typeof runnerMessage>;
 
@@ -86,5 +107,7 @@ export type ServerMessage =
   | { type: "welcome"; runnerId: number; name: string }
   | { type: "assign"; job: JobSpec }
   | { type: "cancel"; jobId: number }
+  | { type: "assign_ci"; job: CiJobSpec }
+  | { type: "cancel_ci"; jobId: number }
   // The workshop is over; its checkout can be removed.
   | { type: "workshop_closed"; workshopId: number };

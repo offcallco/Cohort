@@ -22,6 +22,8 @@ import { NewMergeRequestView } from "./pages/project/NewMergeRequestView.tsx";
 import { MergeRequestView } from "./pages/project/MergeRequestView.tsx";
 import { SettingsView } from "./pages/project/SettingsView.tsx";
 import { RunnersPage } from "./pages/RunnersPage.tsx";
+import { PipelinesView } from "./pages/project/PipelinesView.tsx";
+import { PipelineView } from "./pages/project/PipelineView.tsx";
 import { WorkshopsView } from "./pages/project/WorkshopsView.tsx";
 import { NewWorkshopView } from "./pages/project/NewWorkshopView.tsx";
 import { WorkshopView } from "./pages/project/WorkshopView.tsx";
@@ -81,6 +83,8 @@ export function App() {
           <Route path="workshops" element={<WorkshopsView />} />
           <Route path="workshops/new" element={<NewWorkshopView />} />
           <Route path="workshops/:id" element={<WorkshopView />} />
+          <Route path="pipelines" element={<PipelinesView />} />
+          <Route path="pipelines/:id" element={<PipelineView />} />
           <Route path="jobs" element={<JobsView />} />
           <Route path="jobs/:id" element={<JobView />} />
           <Route path="settings" element={<SettingsView />} />

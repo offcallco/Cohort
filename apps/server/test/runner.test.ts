@@ -53,10 +53,12 @@ const until = async <T>(check: () => Promise<T | undefined | null | false>, what
 const issueJobs = async (n: number): Promise<Job[]> =>
   (await call("GET", `/api/projects/acme/app/issues/${n}/jobs`)).body.jobs;
 
+// The newest non-split job, once nothing is active (a split job hands over to an implement job).
 const finishedJob = (n: number) =>
   until(async () => {
-    const [latest] = await issueJobs(n);
-    return latest && !["queued", "running"].includes(latest.status) ? latest : null;
+    const all = await issueJobs(n);
+    if (all.some((j) => j.status === "queued" || j.status === "running")) return null;
+    return all.find((j) => j.kind !== "split") ?? all[0] ?? null;
   }, `issue #${n}'s job to finish`);
 
 // Agents are shell scripts in these tests; the "script-bot" user runs them.
@@ -79,6 +81,7 @@ async function startRunner(agent: AgentConfig, concurrent = 2) {
     agents: [agent],
     context: { instructions: "Be brief." },
     split: { max_subtasks: 4, max_depth: 1 },
+      ci: { enabled: false, timeout_minutes: 60 },
     dataDir: join(tmp, `runner-${agent.name}`),
   };
   client = new RunnerClient(config, [createAdapter(agent)], { info: () => {}, error: () => {} });
