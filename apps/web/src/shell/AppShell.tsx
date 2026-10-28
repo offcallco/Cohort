@@ -4,6 +4,7 @@ import { LogOut, Search, Settings } from "lucide-react";
 import { RESERVED_SLUGS } from "@cohort/shared";
 import { api } from "../api.ts";
 import { useSession } from "../session.tsx";
+import { useApi } from "../hooks.ts";
 import { CommandPalette } from "./CommandPalette.tsx";
 import { NAV } from "./nav.ts";
 
@@ -28,6 +29,7 @@ export function AppShell() {
   }
 
   const username = status?.user?.username ?? "";
+  const waiting = useApi<{ items: unknown[] }>("/api/reviews", { pollMs: 10_000 }).data?.items.length ?? 0;
   // Code and diff pages use the full width; lists stay readable.
   const wide = /\/(blob|commit|merge_requests\/\d+)/.test(location.pathname);
 
@@ -46,6 +48,11 @@ export function AppShell() {
             <NavLink key={item.to} to={item.to} end={item.to === "/"} className="nav-item" title={item.label}>
               <Icon size={16} aria-hidden />
               <span>{item.label}</span>
+              {item.to === "/reviews" && waiting > 0 && (
+                <span className="nav-count" aria-label={`${waiting} waiting on you`}>
+                  {waiting}
+                </span>
+              )}
             </NavLink>
           );
         })}

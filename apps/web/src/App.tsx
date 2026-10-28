@@ -3,6 +3,8 @@ import { useSession } from "./session.tsx";
 import { AppShell } from "./shell/AppShell.tsx";
 import { Placeholder } from "./pages/Placeholder.tsx";
 import { SettingsPage } from "./pages/SettingsPage.tsx";
+import { MissionControlPage } from "./pages/MissionControlPage.tsx";
+import { ReviewsPage } from "./pages/ReviewsPage.tsx";
 import { AuthPage } from "./pages/AuthPage.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
 import { TokensPage } from "./pages/TokensPage.tsx";
@@ -65,14 +67,11 @@ export function App() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route
-          index
-          element={<Placeholder title="Mission Control">What needs you, what's running and what just finished will show here.</Placeholder>}
-        />
+        <Route index element={<MissionControlPage />} />
         <Route path="repos" element={<HomePage />} />
         <Route path="work" element={<AllIssuesPage />} />
         <Route path="issues" element={<Navigate to="/work" replace />} />
-        <Route path="reviews" element={<Placeholder title="Reviews">Everything waiting on you will collect here.</Placeholder>} />
+        <Route path="reviews" element={<ReviewsPage />} />
         <Route path="agents" element={<RunnersPage />} />
         <Route path="activity" element={<Placeholder title="Activity">Who and what changed what, and when.</Placeholder>} />
         <Route path="settings" element={<SettingsPage />}>

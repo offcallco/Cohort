@@ -24,6 +24,7 @@ export interface JobOutcome {
   error?: string;
   commitSha?: string;
   maxSubtasks?: number;
+  costUsd?: number;
 }
 
 const identityEnv = (job: JobSpec) => ({
@@ -74,7 +75,7 @@ export async function runImplementJob(job: JobSpec, ctx: JobContext): Promise<Jo
         log,
       });
       if (signal.aborted) return { status: "canceled" };
-      if (result.error) return { status: "failed", error: result.error, summary: result.summary };
+      if (result.error) return { status: "failed", error: result.error, summary: result.summary, costUsd: result.costUsd };
 
       if ((await git(["status", "--porcelain"], { cwd: dir })).trim()) {
         const title = job.issue ? `${job.issue.title} (#${job.issue.number})` : `Changes from job ${job.id}`;
@@ -82,12 +83,14 @@ export async function runImplementJob(job: JobSpec, ctx: JobContext): Promise<Jo
         await git(["commit", "--quiet", "--no-verify", "-m", title], { cwd: dir, env: identityEnv(job) });
       }
       const ahead = Number((await git(["rev-list", "--count", `refs/remotes/origin/${startRef}..HEAD`], { cwd: dir })).trim());
-      if (ahead === 0) return { status: "failed", error: "The agent finished without changing any files", summary: result.summary };
+      if (ahead === 0) {
+        return { status: "failed", error: "The agent finished without changing any files", summary: result.summary, costUsd: result.costUsd };
+      }
 
       log(`\nPushing ${ahead} commit${ahead === 1 ? "" : "s"} to ${job.branch}\n`);
       await git([...authArgs(job), "push", "--quiet", url, `HEAD:refs/heads/${job.branch}`], { cwd: dir, secrets: [job.token] });
       const sha = (await git(["rev-parse", "HEAD"], { cwd: dir })).trim();
-      return { status: "succeeded", summary: result.summary, commitSha: sha };
+      return { status: "succeeded", summary: result.summary, commitSha: sha, costUsd: result.costUsd };
     });
   } catch (error) {
     return failure(ctx, error);
@@ -112,8 +115,8 @@ export async function runSplitJob(job: JobSpec, ctx: JobContext): Promise<JobOut
         log: ctx.log,
       });
       if (ctx.signal.aborted) return { status: "canceled" };
-      if (result.error) return { status: "failed", error: result.error };
-      return { status: "succeeded", summary: result.text, maxSubtasks };
+      if (result.error) return { status: "failed", error: result.error, costUsd: result.costUsd };
+      return { status: "succeeded", summary: result.text, maxSubtasks, costUsd: result.costUsd };
     });
   } catch (error) {
     return failure(ctx, error);

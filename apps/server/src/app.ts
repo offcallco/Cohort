@@ -23,6 +23,8 @@ import { workshopRoutes } from "./routes/workshops.ts";
 import { Workshops } from "./workshops/service.ts";
 import { Pipelines } from "./pipelines/service.ts";
 import { pipelineRoutes } from "./routes/pipelines.ts";
+import { missionRoutes } from "./routes/mission.ts";
+import { MissionService } from "./mission.ts";
 import { join } from "node:path";
 
 declare module "fastify" {
@@ -99,6 +101,7 @@ export async function buildApp({ db, reposRoot, logsDir, hub: hubOptions, webDis
   await app.register(jobRoutes, { db, jobs });
   await app.register(mergeRequestRoutes, { db, reposRoot, jobs, pipelines });
   await app.register(pipelineRoutes, { db, pipelines });
+  await app.register(missionRoutes, { mission: new MissionService(db, reposRoot, jobs) });
   await app.register(workshopRoutes, { db, workshops });
   await app.register(gitHttpRoutes, { db, reposRoot, pipelines });
 

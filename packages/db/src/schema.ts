@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   integer,
   primaryKey,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -209,6 +210,8 @@ export const jobs = sqliteTable("jobs", {
   summary: text("summary"),
   error: text("error"),
   commitSha: text("commit_sha"),
+  // What the agent reported the run cost, when it reports one (Claude Code does).
+  costUsd: real("cost_usd"),
   mergeRequestId: integer("merge_request_id"),
   createdAt: createdAt(),
   startedAt: integer("started_at", { mode: "timestamp_ms" }),

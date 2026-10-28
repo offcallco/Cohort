@@ -1,0 +1,1 @@
+ALTER TABLE `jobs` ADD `cost_usd` real;

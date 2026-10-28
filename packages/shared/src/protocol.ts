@@ -97,6 +97,8 @@ export const runnerMessage = z.discriminatedUnion("type", [
     sessionId: z.string().optional(),
     // Split jobs: the runner's max_subtasks, above which a split needs approval.
     maxSubtasks: z.number().int().optional(),
+    // What the agent reported the run cost, if it reports one.
+    costUsd: z.number().nonnegative().optional(),
   }),
   // The runner couldn't take an assigned job (no capacity, unknown agent); requeue it.
   z.object({ type: z.literal("rejected"), jobId: z.number().int(), reason: z.string(), ci: z.boolean().optional() }),

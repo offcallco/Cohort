@@ -126,7 +126,7 @@ export class ClaudeCodeAgent implements AgentAdapter {
   async implement(options: RunOptions): Promise<RunResult> {
     const s = await this.session(options, this.config.permission_mode, null);
     if (options.signal.aborted) return { summary: "", error: "Canceled" };
-    return { summary: s.result?.result ?? "", error: this.failure(s) };
+    return { summary: s.result?.result ?? "", error: this.failure(s), costUsd: s.result?.total_cost_usd };
   }
 
   async plan(options: PlanOptions): Promise<PlanResult> {
@@ -138,6 +138,7 @@ export class ClaudeCodeAgent implements AgentAdapter {
       text: s.result?.result ?? "",
       sessionId: s.sessionId,
       error,
+      costUsd: s.result?.total_cost_usd,
       sessionMissing: error !== undefined && s.sessionMissing,
     };
   }

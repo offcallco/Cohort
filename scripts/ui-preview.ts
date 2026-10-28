@@ -144,6 +144,18 @@ async function seed(db: Db) {
   job({ issueId: i5.id, status: "succeeded", branch: "cohort/5-document-the-refund-api", startedAt: minutes(300), finishedAt: minutes(280) });
   db.insert(issueComments).values({ issueId: i2.id, authorId: bot.id, body: "Opened !1 from `cohort/2-refactor-checkout`." }).run();
 
+  // Pushing the demo repo started real pipelines that no runner will pick up; replace them with
+  // the states the preview should show.
+  // They're created just after each push returns, so wait for both (main and the branch).
+  for (let i = 0; i < 100 && db.select().from(pipelines).all().length < 2; i++) await new Promise((r) => setTimeout(r, 50));
+  db.delete(pipelineJobs).run();
+  db.delete(pipelines).run();
+  const mainSha = (await git(work, "rev-parse", "main")).stdout.trim();
+  const mainPipeline = db.insert(pipelines).values({ projectId: 1, ref: "main", sha: mainSha, status: "success", source: "push", triggeredById: 1, startedAt: minutes(400), finishedAt: minutes(398) }).returning().get();
+  db.insert(pipelineJobs).values([
+    { pipelineId: mainPipeline.id, name: "test", stage: "test", stageIndex: 1, script: '["npm test"]', status: "success" },
+    { pipelineId: mainPipeline.id, name: "lint", stage: "test", stageIndex: 1, script: '["echo lint ok"]', status: "success" },
+  ]).run();
   const head = (await git(work, "rev-parse", "HEAD")).stdout.trim();
   const p = db.insert(pipelines).values({ projectId: 1, ref: "cohort/2-refactor-checkout", sha: head, status: "manual", source: "merge_request", triggeredById: bot.id, mergeRequestId: mr.id }).returning().get();
   db.insert(pipelineJobs).values([

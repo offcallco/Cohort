@@ -38,6 +38,7 @@ export interface JobResult {
   commitSha?: string;
   sessionId?: string;
   maxSubtasks?: number;
+  costUsd?: number;
 }
 
 // Implemented by the workshop service, which owns what workshop jobs mean.
@@ -204,6 +205,7 @@ export class Jobs {
         summary: result.summary ?? null,
         error: result.error ?? null,
         commitSha: result.commitSha ?? null,
+        costUsd: result.costUsd ?? null,
         tokenHash: null,
         finishedAt: new Date(),
       })
@@ -262,6 +264,7 @@ export class Jobs {
       summary: job.summary,
       error: job.error,
       commitSha: job.commitSha,
+      costUsd: job.costUsd,
       mergeRequest: mr?.number ?? null,
       waitingReason:
         job.status === "queued" ? (this.blockedReason(job) ?? this.dispatcher?.waitingReason(job.agentType) ?? null) : null,
