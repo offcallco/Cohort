@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { openDb } from "@cohort/db";
 import { buildApp } from "./app.ts";
@@ -8,6 +9,27 @@ import { ensureLocalRunnerConfig, startLocalRunner } from "./localRunner.ts";
 
 const webDir = fileURLToPath(new URL("../../web", import.meta.url));
 const webDist = fileURLToPath(new URL("../../web/dist", import.meta.url));
+const sharedSrc = fileURLToPath(new URL("../../../packages/shared/src", import.meta.url));
+
+// Newest modification time of any file under `dir`.
+function newestMtime(dir: string): number {
+  let newest = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    newest = Math.max(newest, entry.isDirectory() ? newestMtime(path) : statSync(path).mtimeMs);
+  }
+  return newest;
+}
+
+// The UI needs building when there's no build yet, or its sources (or the shared types it
+// uses) changed since, e.g. after pulling a new version of Cohort.
+function webBuildIsStale() {
+  const built = join(webDist, "index.html");
+  if (!existsSync(built)) return true;
+  const sources = [join(webDir, "src"), join(webDir, "index.html"), join(webDir, "vite.config.ts"), sharedSrc];
+  const newest = Math.max(...sources.map((s) => (statSync(s).isDirectory() ? newestMtime(s) : statSync(s).mtimeMs)));
+  return newest > statSync(built).mtimeMs;
+}
 
 const usage = `Cohort ${version}
 
@@ -31,8 +53,8 @@ async function start(dev: boolean, withRunner: boolean) {
   const p = paths(config.home);
   for (const dir of [config.home, p.repos, p.runner]) mkdirSync(dir, { recursive: true });
 
-  if (!dev && !existsSync(webDist)) {
-    console.log("Building the web UI (first run only)...");
+  if (!dev && webBuildIsStale()) {
+    console.log("Building the web UI...");
     const build = spawnSync("pnpm", ["build"], { cwd: webDir, stdio: "inherit" });
     if (build.status !== 0) process.exit(build.status ?? 1);
   }

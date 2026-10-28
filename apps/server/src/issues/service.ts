@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, max, ne, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, max, ne, sql, type SQL } from "drizzle-orm";
 import {
   issueComments,
   issueDependencies,
@@ -46,6 +46,8 @@ export interface ListFilter {
   status?: IssueStatus | "open";
   label?: string;
   q?: string;
+  // A user's id, any agent, or nobody.
+  assignee?: { userId: number } | "agents" | "none";
 }
 
 function filterConditions(db: Db, filter: ListFilter): SQL[] {
@@ -64,20 +66,31 @@ function filterConditions(db: Db, filter: ListFilter): SQL[] {
       .where(eq(labels.name, filter.label));
     where.push(inArray(issues.id, withLabel));
   }
+  if (filter.assignee === "none") where.push(isNull(issues.assigneeId));
+  else if (filter.assignee === "agents") {
+    where.push(inArray(issues.assigneeId, db.select({ id: users.id }).from(users).where(eq(users.kind, "bot"))));
+  } else if (filter.assignee) where.push(eq(issues.assigneeId, filter.assignee.userId));
   return where;
 }
 
-export function listIssues(db: Db, scope: { projectId: number } | { workspaceId: number }, filter: ListFilter) {
+// `scope` "all" lists issues from every project in every workspace.
+export function listIssues(
+  db: Db,
+  scope: { projectId: number } | { workspaceId: number } | "all",
+  filter: ListFilter,
+  limit = 500,
+) {
   const where = filterConditions(db, filter);
-  where.push(
-    "projectId" in scope ? eq(issues.projectId, scope.projectId) : eq(projects.workspaceId, scope.workspaceId),
-  );
+  if (scope !== "all") {
+    where.push("projectId" in scope ? eq(issues.projectId, scope.projectId) : eq(projects.workspaceId, scope.workspaceId));
+  }
   const rows = db
     .select({ issue: issues })
     .from(issues)
     .innerJoin(projects, eq(projects.id, issues.projectId))
     .where(and(...where))
     .orderBy(desc(issues.updatedAt))
+    .limit(limit)
     .all()
     .map((r) => r.issue);
   return summarize(db, rows);
