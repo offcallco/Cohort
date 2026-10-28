@@ -8,6 +8,27 @@
       "when": 1793128799754,
       "tag": "0000_workable_green_goblin",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793129974493,
+      "tag": "0001_loose_omega_red",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793131275155,
+      "tag": "0002_redundant_dracula",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793135721166,
+      "tag": "0003_lying_grey_gargoyle",
+      "breakpoints": true
     }
   ]
 }

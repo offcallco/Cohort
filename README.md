@@ -20,7 +20,52 @@ pnpm cohort start
 Open http://localhost:7700 and create your account. The first start builds the web UI, which
 takes a few seconds.
 
-Cohort keeps all its data in `~/.cohort/`: the SQLite database, your repos and runner files.
+## Using git
+
+Create a workspace and a project in the UI, then clone or push with the URL shown on the project
+page, like `http://localhost:7700/my-workspace/my-project.git`. When git asks for credentials,
+use any username and an access token (Settings → Access tokens) as the password. Your OS
+credential helper remembers it after the first time.
+
+## Agents
+
+Assign an issue to **claude-bot** (Claude Code) or **codex-bot** (OpenAI Codex) and a runner
+picks it up: it checks out a fresh git worktree, runs the agent on the issue, commits, pushes a
+`cohort/<issue>-<title>` branch and opens a merge request. The issue moves to *In review* and the
+bot comments with a summary. Merging the MR marks the issue done. Watch the live log from the
+issue or the project's Jobs tab, and cancel or retry from there.
+
+`pnpm cohort start` also starts a runner on this machine, configured in
+`~/.cohort/runner/config.toml`:
+
+```toml
+concurrent = 2                    # jobs at once, all agents combined
+
+[[agents]]
+name = "claude"
+type = "claude-code"              # needs the `claude` CLI
+limit = 2                         # jobs at once for this agent
+permission_mode = "acceptEdits"   # edit files only; "bypassPermissions" lets it run commands too
+
+[[agents]]
+name = "codex"
+type = "codex"                    # needs the `codex` CLI
+limit = 2
+
+[context]
+instructions = """Extra instructions for every job on this runner."""
+```
+
+Agents whose CLI isn't installed are skipped, and their issues wait in the queue with a note
+saying no runner can take them. Each project also has a *Runner context* setting (project →
+Settings) that's added to every job's instructions.
+
+To run agents on another machine, create a runner under **Runners**, save the config it shows,
+and run `pnpm runner run --config config.toml` from a clone of Cohort. Use
+`pnpm cohort start --no-runner` to skip the local one.
+
+Cohort keeps all its data in `~/.cohort/`: the SQLite database, your repos, job logs and
+runner files.
 
 ## Configuration
 
@@ -37,7 +82,7 @@ Set these environment variables before `pnpm cohort start`:
 
 ```sh
 pnpm dev          # API on :7700 and the UI with hot reload on http://localhost:5173
-pnpm test         # server tests
+pnpm test         # server and runner tests (needs git on PATH)
 pnpm typecheck    # all packages
 ```
 
@@ -49,6 +94,7 @@ After changing `packages/db/src/schema.ts`, create a migration with
 ```
 apps/server     Fastify API and the `cohort` command
 apps/web        React UI (Vite)
+apps/runner     Agent runner: WebSocket client, worktrees, Claude Code and Codex adapters
 packages/db     SQLite schema and migrations (Drizzle)
-packages/shared Request and response types shared by the server and UI
+packages/shared Request/response types and the runner protocol
 ```

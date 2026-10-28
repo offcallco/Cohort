@@ -12,7 +12,8 @@ import {
 import { version } from "../config.ts";
 import { parseBody, requireUser } from "../http.ts";
 
-const userCount = (db: Db) => db.select({ n: count() }).from(users).get()?.n ?? 0;
+// Bots are created automatically, so only human accounts count towards setup.
+const userCount = (db: Db) => db.select({ n: count() }).from(users).where(eq(users.kind, "human")).get()?.n ?? 0;
 
 function startSession(db: Db, reply: FastifyReply, userId: number) {
   const { token, expiresAt } = createSession(db, userId);
@@ -36,10 +37,13 @@ export async function authRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const body = parseBody(credentials, request.body, reply);
     if (!body) return;
     if (userCount(db) > 0) return reply.code(409).send({ error: "Cohort is already set up" });
+    if (db.select({ id: users.id }).from(users).where(eq(users.username, body.username)).get()) {
+      return reply.code(400).send({ error: "That username is reserved" });
+    }
     const user = db
       .insert(users)
       .values({ username: body.username, passwordHash: await hashPassword(body.password) })
-      .returning({ id: users.id, username: users.username })
+      .returning({ id: users.id, username: users.username, kind: users.kind })
       .get();
     startSession(db, reply, user.id);
     return reply.code(201).send({ user });
@@ -49,11 +53,11 @@ export async function authRoutes(app: FastifyInstance, { db }: { db: Db }) {
     const body = parseBody(credentials, request.body, reply);
     if (!body) return;
     const user = db.select().from(users).where(eq(users.username, body.username)).get();
-    if (!user || !(await verifyPassword(body.password, user.passwordHash))) {
+    if (!user || user.kind !== "human" || !(await verifyPassword(body.password, user.passwordHash))) {
       return reply.code(401).send({ error: "Wrong username or password" });
     }
     startSession(db, reply, user.id);
-    return { user: { id: user.id, username: user.username } };
+    return { user: { id: user.id, username: user.username, kind: user.kind } };
   });
 
   app.post("/api/logout", async (request, reply) => {

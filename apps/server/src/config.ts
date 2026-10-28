@@ -27,6 +27,7 @@ export const paths = (home: string) => ({
   db: join(home, "cohort.db"),
   repos: join(home, "repos"),
   runner: join(home, "runner"),
+  logs: join(home, "logs"),
 });
 
 const rootPackage = JSON.parse(
