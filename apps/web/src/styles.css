@@ -1750,3 +1750,285 @@ button.chip.active {
     gap: var(--s4);
   }
 }
+
+/* --- Work item page ---------------------------------------------------------------------- */
+
+.work-header {
+  display: grid;
+  gap: var(--s2);
+  margin-bottom: var(--s4);
+}
+
+.work-header h1 {
+  margin: 0;
+}
+
+.tracker {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--s1);
+  list-style: none;
+  margin: 0 0 var(--s4);
+  padding: 0;
+}
+
+.step a {
+  --c: var(--text-muted);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--s2);
+  padding: var(--s2) var(--s3);
+  border-top: 2px solid var(--c);
+  color: var(--text-secondary);
+  text-decoration: none;
+  min-height: 56px;
+}
+
+.step a:hover {
+  background: var(--hover);
+  text-decoration: none;
+}
+
+.step a svg {
+  grid-row: 1;
+  align-self: center;
+  color: var(--c);
+}
+
+.step-label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.step-detail {
+  grid-column: 1 / -1;
+  font-size: var(--fs-meta);
+  line-height: 1.4;
+}
+
+.step-done a {
+  --c: var(--st-passed);
+}
+
+.step-current a {
+  --c: var(--st-running);
+}
+
+.step-waiting a {
+  --c: var(--st-waiting);
+}
+
+.step-failed a {
+  --c: var(--st-failed);
+}
+
+.step-pending a,
+.step-skipped a {
+  --c: var(--border);
+}
+
+.step-pending .step-label,
+.step-skipped .step-label {
+  color: var(--text-secondary);
+}
+
+.gate {
+  --c: var(--border);
+  display: grid;
+  gap: var(--s3);
+  padding: var(--s4);
+  margin-bottom: var(--s6);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c);
+  border-radius: var(--r-card);
+  background: var(--panel);
+}
+
+.gate-waiting {
+  --c: var(--st-waiting);
+}
+
+.gate-running {
+  --c: var(--st-running);
+}
+
+.gate-failed {
+  --c: var(--st-failed);
+}
+
+.gate-passed {
+  --c: var(--st-passed);
+}
+
+.gate-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  font-weight: 500;
+}
+
+.gate-note textarea {
+  font-weight: 400;
+}
+
+.gate-reason {
+  margin: 0;
+}
+
+.prose-block {
+  padding: var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--panel);
+}
+
+.agent-summary {
+  display: grid;
+  gap: var(--s2);
+  margin-bottom: var(--s3);
+}
+
+.changed-meta {
+  margin-bottom: var(--s3);
+}
+
+.parts {
+  margin-top: var(--s3);
+}
+
+.parts ol {
+  margin: var(--s2) 0 0;
+  padding-left: var(--s5);
+  display: grid;
+  gap: var(--s1);
+}
+
+.file-list,
+.check-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.file-list li,
+.check-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.file-list li > a {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.check-head {
+  margin-bottom: var(--s2);
+}
+
+.check-error {
+  flex-basis: 100%;
+  margin: 0;
+  font-family: var(--font-mono);
+}
+
+.details-block > summary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  cursor: pointer;
+  list-style: none;
+  padding: var(--s2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.details-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+.details-block > summary h2 {
+  margin: 0;
+}
+
+.details-block > summary::before {
+  content: "▸";
+  color: var(--text-muted);
+}
+
+.details-block[open] > summary::before {
+  content: "▾";
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: var(--s5);
+  padding-top: var(--s3);
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--s3) var(--s3);
+  align-content: start;
+  margin: 0;
+}
+
+.fields dt {
+  font-size: var(--fs-meta);
+  color: var(--text-muted);
+  padding-top: var(--s2);
+}
+
+.fields dd {
+  margin: 0;
+  display: grid;
+  gap: var(--s1);
+}
+
+.fields select {
+  width: 100%;
+}
+
+.timeline {
+  list-style: none;
+  margin: var(--s3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s3);
+}
+
+.timeline li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--s3);
+}
+
+.timeline-time {
+  padding-top: 2px;
+}
+
+.timeline-text .markdown p:last-child {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  .tracker {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
+  .timeline li {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

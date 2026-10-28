@@ -35,7 +35,9 @@ export interface JobSpec {
   baseBranch: string;
   // True on retries: the branch already exists and work continues on top of it.
   branchExists: boolean;
-  issue: { number: number; title: string; body: string; labels: string[] } | null;
+  issue: { number: number; title: string; body: string; labels: string[]; plan: string | null } | null;
+  // A person's instruction for this run: feedback on the plan, requested changes, a redirect.
+  instruction: string | null;
   // Project runner context from the UI.
   context: string;
   // Identity for commits the runner makes.
@@ -95,7 +97,7 @@ export const runnerMessage = z.discriminatedUnion("type", [
     commitSha: z.string().optional(),
     // Workshop turns: the agent session, so the next turn can resume it.
     sessionId: z.string().optional(),
-    // Split jobs: the runner's max_subtasks, above which a split needs approval.
+    // Plan jobs: set when the runner wants splits over this many sub-issues approved.
     maxSubtasks: z.number().int().optional(),
     // What the agent reported the run cost, if it reports one.
     costUsd: z.number().nonnegative().optional(),

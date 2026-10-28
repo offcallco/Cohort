@@ -31,12 +31,14 @@ const runnerConfig = z.object({
   context: z.object({ instructions: z.string().default("") }).default({ instructions: "" }),
   split: z
     .object({
-      // A split into more sub-issues than this waits for the user's approval.
+      // Agents aim for at most this many sub-issues.
       max_subtasks: z.number().int().positive().default(4),
+      // When true, a split into more than max_subtasks waits for a person's approval.
+      require_approval: z.boolean().default(false),
       // 0 turns splitting off; 1 lets issues split once (sub-issues never split again).
       max_depth: z.number().int().min(0).max(1).default(1),
     })
-    .default({ max_subtasks: 4, max_depth: 1 }),
+    .default({ max_subtasks: 4, require_approval: false, max_depth: 1 }),
   ci: z
     .object({
       // Run CI jobs from .cohort-ci.yml. They run shell commands from the repo on this machine.

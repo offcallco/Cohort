@@ -112,6 +112,12 @@ export const issues = sqliteTable(
     // A split waiting for approval because it's over the runner's max_subtasks:
     // JSON { issues: ProposedIssue[], limit: number }.
     splitProposal: text("split_proposal"),
+    // The agent's plan for the issue (markdown), and whether a person has approved it.
+    // Issues people assign directly wait for approval; workshop issues and sub-issues don't.
+    plan: text("plan"),
+    planStatus: text("plan_status", { enum: ["pending", "approved", "changes_requested", "rejected", "auto"] }),
+    // An instruction for the next agent run, e.g. from Redirect while one is still stopping.
+    pendingInstruction: text("pending_instruction"),
     authorId: integer("author_id")
       .notNull()
       .references(() => users.id),
@@ -207,6 +213,8 @@ export const jobs = sqliteTable("jobs", {
   baseBranch: text("base_branch").notNull(),
   // Lets the runner clone and push this project's repo while the job runs.
   tokenHash: text("token_hash").unique(),
+  // A person's instruction for this run: feedback on a plan, requested changes, a redirect.
+  instruction: text("instruction"),
   summary: text("summary"),
   error: text("error"),
   commitSha: text("commit_sha"),
@@ -241,6 +249,7 @@ export const mergeRequests = sqliteTable(
       .notNull()
       .references(() => users.id),
     mergeSha: text("merge_sha"),
+    mergedById: integer("merged_by_id").references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
     mergedAt: integer("merged_at", { mode: "timestamp_ms" }),

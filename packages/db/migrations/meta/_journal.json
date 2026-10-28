@@ -57,6 +57,20 @@
       "when": 1793227409826,
       "tag": "0007_milky_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793227818194,
+      "tag": "0008_amused_dust",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793228294062,
+      "tag": "0009_tough_changeling",
+      "breakpoints": true
     }
   ]
 }

@@ -48,6 +48,12 @@ async function newProject() {
         return i.status === status ? i : null;
       }, `#${n} to be ${status}`),
     mr: async (n: number) => (await call("GET", `${api}/merge_requests/${n}`)).body.mergeRequest,
+    // Root tasks wait for their plan to be approved.
+    approvePlan: async (n: number) => {
+      await until(async () => (await call("GET", `${api}/issues/${n}`)).body.issue.planStatus === "pending", `#${n}'s plan`);
+      const res = await call("POST", `${api}/issues/${n}/plan`, { decision: "approve" });
+      if (res.status !== 200) throw new Error(res.body.error);
+    },
     branches: async () => ((await call("GET", api)).body.branches as { name: string }[]).map((b) => b.name).sort(),
   };
 }
@@ -70,7 +76,11 @@ parts() {
   printf ']</issues>\\n'
 }
 case "$P" in
-  *"Split this issue only if"*)
+  *"Don't write any code yet"*)
+    case "$P" in
+      *"asked for changes"*) printf '<plan>Revised plan for %s</plan>\\n' "$n" ;;
+      *) printf '<plan>Plan for %s</plan>\\n' "$n" ;;
+    esac
     case "$P" in
       *"Big job"*) PART_PREFIX="Big part"; parts a: b:a c:a ;;
       *"Huge job"*) PART_PREFIX="Huge part"; parts a: b: c: d: e: f: ;;
@@ -82,9 +92,13 @@ case "$P" in
     echo "Resolved the conflicts" ;;
   *)
     echo "start $n" >> "$ORDER_LOG"
-    sleep 0.3
+    case "$P" in
+      *"Slow job"*) case "$P" in *"gave you this instruction"*) ;; *) sleep 30 ;; esac ;;
+      *) sleep 0.3 ;;
+    esac
     case "$P" in
       *"Clash part"*) printf 'part %s\\n' "$n" > shared.txt ;;
+      *"asked for changes"*) printf 'changed\\n' >> "issue-$n.txt" ;;
       *) printf '%s\\n' "$n" > "issue-$n.txt" ;;
     esac
     echo "end $n" >> "$ORDER_LOG"
@@ -122,7 +136,7 @@ beforeAll(async () => {
       concurrent: 3,
       agents: [agent],
       context: { instructions: "" },
-      split: { max_subtasks: 4, max_depth: 1 },
+      split: { max_subtasks: 4, require_approval: true, max_depth: 1 },
       ci: { enabled: false, timeout_minutes: 60 },
       dataDir: join(tmp, "runner"),
     },
@@ -142,7 +156,11 @@ describe("splitting", () => {
   it("splits a big issue, runs the parts in dependency order and opens one MR", async () => {
     const p = await newProject();
     const big = await p.create({ title: "Big job", assignee: "script-bot" });
-    const parent = await p.status(big.number, "review");
+    await p.approvePlan(big.number);
+    const parent = await until(async () => {
+      const i = await p.get(big.number);
+      return i.status === "review" && i.childIssues.length ? i : null;
+    }, "the parts to merge");
 
     expect(parent.branch).toBe(`cohort/${big.number}-big-job`);
     const kids = await Promise.all(parent.childIssues.map((c) => p.get(c.number)));
@@ -177,10 +195,15 @@ describe("splitting", () => {
   it("does small issues as one job", async () => {
     const p = await newProject();
     const small = await p.create({ title: "Small job", assignee: "script-bot" });
-    const issue = await p.status(small.number, "review");
+    await p.approvePlan(small.number);
+    const issue = await until(async () => {
+      const i = await p.get(small.number);
+      return i.status === "review" && i.planStatus === "approved" ? i : null;
+    }, "the MR");
     expect((await p.jobs(small.number)).map((j) => j.kind)).toEqual(["implement", "split"]);
     expect(issue.childIssues).toEqual([]);
-    expect(issue.commentList[0]!.body).toBe("This is small enough to do as one job.");
+    expect(issue.commentList.map((c) => c.body)).toContain("This is small enough to do as one job.");
+    expect(issue.plan).toBe(`Plan for ${small.number}`);
     expect((await p.mr(1)).files.map((f: { newPath: string }) => f.newPath)).toEqual([`issue-${small.number}.txt`]);
   }, 30_000);
 
@@ -191,9 +214,11 @@ describe("splitting", () => {
     expect((await p.jobs(issue.number)).map((j) => j.kind)).toEqual(["implement"]);
   }, 30_000);
 
-  it("waits for approval when a split is over the limit", async () => {
+  it("waits for approval when a split is over the limit, if the runner asks for that", async () => {
+    // Sub-issues skip plan approval, so only the runner's opt-in limit applies.
     const p = await newProject();
-    const declined = await p.create({ title: "Huge job", assignee: "script-bot" });
+    const holder = await p.create({ title: "Holder" });
+    const declined = await p.create({ title: "Huge job", parent: holder.number, assignee: "script-bot" });
     const waiting = await p.status(declined.number, "blocked");
     expect(waiting.splitProposal).toMatchObject({ limit: 4 });
     expect(waiting.splitProposal!.issues).toHaveLength(6);
@@ -206,7 +231,7 @@ describe("splitting", () => {
     expect(done.childIssues).toEqual([]);
 
     // Approved: all six run, three at a time, then one MR.
-    const approved = await p.create({ title: "Huge job", assignee: "script-bot" });
+    const approved = await p.create({ title: "Huge job", parent: holder.number, assignee: "script-bot" });
     await p.status(approved.number, "blocked");
     await call("POST", `${p.api}/issues/${approved.number}/split`, { approve: true });
     const parent = await p.status(approved.number, "review");
@@ -217,7 +242,11 @@ describe("splitting", () => {
   it("asks the agent to resolve conflicts between parts", async () => {
     const p = await newProject();
     const clash = await p.create({ title: "Clash job", assignee: "script-bot" });
-    const parent = await p.status(clash.number, "review");
+    await p.approvePlan(clash.number);
+    const parent = await until(async () => {
+      const i = await p.get(clash.number);
+      return i.status === "review" && i.childIssues.length ? i : null;
+    }, "the parts to merge");
     const kids = await Promise.all(parent.childIssues.map((c) => p.get(c.number)));
     const kinds = (await Promise.all(kids.map((k) => p.jobs(k.number)))).map((js) => js.map((j) => j.kind).sort());
     // One part merged cleanly; the other needed a resolve job.
@@ -226,6 +255,69 @@ describe("splitting", () => {
     expect(mr.mergeable).toBe(true);
     const shared = (await call("GET", `${p.api}/blob?ref=${encodeURIComponent(parent.branch!)}&path=shared.txt`)).body.blob.content;
     expect(shared).toBe("resolved\n");
+  }, 40_000);
+});
+
+describe("plans and the human gate", () => {
+  it("waits for a person to approve the plan for a task they assigned", async () => {
+    const p = await newProject();
+    const issue = await p.create({ title: "Small job", assignee: "script-bot" });
+    const waiting = await until(async () => {
+      const i = await p.get(issue.number);
+      return i.planStatus === "pending" ? i : null;
+    }, "the plan");
+    expect(waiting).toMatchObject({ status: "review", plan: `Plan for ${issue.number}` });
+    expect((await p.jobs(issue.number)).map((j) => j.kind)).toEqual(["split"]);
+    const needs = (await call("GET", "/api/reviews")).body.items as { kind: string; title: string; need: string }[];
+    expect(needs.find((n) => n.kind === "plan" && n.title === "Small job")?.need).toBe("Approve the plan before the agent writes code.");
+  }, 30_000);
+
+  it("revises the plan when asked for changes, and stops when rejected", async () => {
+    const p = await newProject();
+    const issue = await p.create({ title: "Small job", assignee: "script-bot" });
+    await until(async () => (await p.get(issue.number)).planStatus === "pending", "the plan");
+    expect((await call("POST", `${p.api}/issues/${issue.number}/plan`, { decision: "changes" })).body.error).toMatch(/Say what to change/);
+    await call("POST", `${p.api}/issues/${issue.number}/plan`, { decision: "changes", note: "Use Redis" });
+    const revised = await until(async () => {
+      const i = await p.get(issue.number);
+      return i.planStatus === "pending" && i.plan?.startsWith("Revised") ? i : null;
+    }, "the revised plan");
+    expect(revised.commentList.map((c) => c.body)).toContain("Use Redis");
+
+    await call("POST", `${p.api}/issues/${issue.number}/plan`, { decision: "reject" });
+    expect(await p.get(issue.number)).toMatchObject({ planStatus: "rejected", status: "todo", assignee: null });
+  }, 30_000);
+
+  it("has the agent act on requested changes, updating the same MR", async () => {
+    const p = await newProject();
+    const issue = await p.create({ title: "Small job", assignee: "script-bot" });
+    await p.approvePlan(issue.number);
+    await until(async () => {
+      const i = await p.get(issue.number);
+      return i.status === "review" && i.planStatus === "approved";
+    }, "the MR");
+    expect((await p.mr(1)).commits).toHaveLength(1);
+
+    const res = await call("POST", `${p.api}/issues/${issue.number}/request-changes`, { note: "Add a second line" });
+    expect(res.body.issue.status).toBe("in_progress");
+    await until(async () => (await p.mr(1)).commits.length === 2 && (await p.get(issue.number)).status === "review", "the MR update");
+    expect((await p.jobs(issue.number)).map((j) => j.kind)).toEqual(["implement", "implement", "split"]);
+    expect((await call("GET", `${p.api}/merge_requests`)).body.mergeRequests).toHaveLength(1);
+  }, 40_000);
+
+  it("redirects a running agent with a new instruction", async () => {
+    const p = await newProject();
+    const issue = await p.create({ title: "Slow job", assignee: "script-bot" });
+    await p.approvePlan(issue.number);
+    await until(async () => (await p.jobs(issue.number)).some((j) => j.kind === "implement" && j.status === "running"), "the slow run");
+    await call("POST", `${p.api}/issues/${issue.number}/redirect`, { note: "Skip the slow part" });
+    const done = await until(async () => {
+      const i = await p.get(issue.number);
+      return i.status === "review" && i.planStatus === "approved" && i.commentList.some((c) => c.body.startsWith("Opened")) ? i : null;
+    }, "the redirected run");
+    const kinds = (await p.jobs(issue.number)).map((j) => `${j.kind}:${j.status}`);
+    expect(kinds).toEqual(["implement:succeeded", "implement:canceled", "split:succeeded"]);
+    expect(done.commentList.map((c) => c.body)).toContain("Redirected:\n\nSkip the slow part");
   }, 40_000);
 });
 

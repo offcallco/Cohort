@@ -264,13 +264,15 @@ export class RunnerHub implements Dispatcher, CiDispatcher {
       const conn = this.pickRunner(job.agentType, this.jobs.preferredRunner(job));
       if (!conn) continue;
       const token = JOB_TOKEN_PREFIX + randomToken();
+      // Build the spec first (it depends on the runner, e.g. for workshop sessions). Then mark
+      // the job assigned and send it in one step, so a cancel can never reach the runner
+      // before the job it cancels.
+      const draft = { ...job, runnerId: conn.runnerId };
+      const spec = this.jobs.spec(draft, token);
+      spec.branchExists = await this.jobs.branchExists(draft);
+      if (!this.connections.has(conn.runnerId) || this.jobs.get(job.id)?.status !== "queued") continue;
       conn.running.set(job.id, job.agentType);
       this.jobs.assigned(job.id, conn.runnerId, sha256(token));
-      // Re-read: the spec depends on the runner it was just assigned to.
-      const assigned = this.jobs.get(job.id)!;
-      const spec = this.jobs.spec(assigned, token);
-      spec.branchExists = await this.jobs.branchExists(assigned);
-      if (!this.connections.has(conn.runnerId)) continue;
       this.send(conn, { type: "assign", job: spec });
     }
 

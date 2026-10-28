@@ -106,7 +106,7 @@ async function seed(db: Db) {
   const i1 = (await call("POST", issues, { title: "Add login rate limiting", body: "Limit failed logins to 5 per minute per IP.", labels: ["security"] })).issue;
   const i2 = (await call("POST", issues, { title: "Refactor checkout totals", body: "Compute totals in cents.", labels: ["checkout"] })).issue;
   const i3 = (await call("POST", issues, { title: "Fix flaky refund test", labels: ["tests"] })).issue;
-  await call("POST", issues, { title: "Add CSV export for payouts", labels: ["payouts"] });
+  const i4 = (await call("POST", issues, { title: "Add CSV export for payouts", body: "Merchants want to download their payouts as CSV.", labels: ["payouts"] })).issue;
   const i5 = (await call("POST", issues, { title: "Document the refund API", labels: ["docs"] })).issue;
   await call("POST", "/api/projects/acme/web/issues", { title: "New pricing page", labels: ["marketing"] });
   await call("POST", "/api/projects/internal/tools/issues", { title: "Nightly backup script", assignee: "justin" });
@@ -119,9 +119,20 @@ async function seed(db: Db) {
   set(i2.id, "review");
   set(i3.id, "blocked");
   set(i5.id, "done");
+  // A plan waiting for approval.
+  set(i4.id, "review");
+  db.update(issuesTable)
+    .set({
+      planStatus: "pending",
+      branch: "cohort/4-add-csv-export-for-payouts",
+      plan: "## Approach\nAdd a `GET /payouts.csv` endpoint that streams rows from the payouts table.\n\n## Files\n- `src/payouts/export.js` (new)\n- `src/routes.js`: register the route\n- `src/payouts/export.test.js` (new)\n\n## Testing\nUnit test for the CSV formatter, one route test.\n\n## Unsure about\nWhether amounts should be in cents or dollars in the file. I've assumed dollars with two decimals.",
+    })
+    .where(eq(issuesTable.id, i4.id))
+    .run();
 
   const job = (values: Partial<typeof jobs.$inferInsert>) =>
     db.insert(jobs).values({ projectId: 1, kind: "implement", botId: bot.id, agentType: "claude-code", branch: "", baseBranch: "main", ...values } as typeof jobs.$inferInsert).returning().get();
+  job({ issueId: i4.id, kind: "split", status: "succeeded", branch: "cohort/4-add-csv-export-for-payouts", startedAt: minutes(12), finishedAt: minutes(10), costUsd: 0.08 });
   const running = job({ issueId: i1.id, status: "running", branch: "cohort/1-add-login-rate-limiting", startedAt: minutes(6) });
   app.jobs.logs.append(running.id, "Claude Code started\n→ Read src/checkout.js\n→ Edit src/auth/rateLimit.js\n→ Write src/auth/rateLimit.test.js\n");
   const mr = db
@@ -139,7 +150,17 @@ async function seed(db: Db) {
     })
     .returning()
     .get();
-  job({ issueId: i2.id, status: "succeeded", branch: "cohort/2-refactor-checkout", mergeRequestId: mr.id, startedAt: minutes(40), finishedAt: minutes(22), summary: "Moved totals to cents and added tax()." });
+  job({
+    issueId: i2.id,
+    status: "succeeded",
+    branch: "cohort/2-refactor-checkout",
+    mergeRequestId: mr.id,
+    startedAt: minutes(40),
+    finishedAt: minutes(22),
+    costUsd: 0.41,
+    summary: "Totals are now computed in cents, so `0.1 × 3` is `0.3`. Added a `tax()` helper and a test for totals.\n\nI wasn't sure whether tax should round half-up or half-even; I used half-up. Please check that.",
+  });
+  db.update(issuesTable).set({ planStatus: "approved", branch: "cohort/2-refactor-checkout", plan: "Compute totals in integer cents; add a tax helper; test totals." }).where(eq(issuesTable.id, i2.id)).run();
   job({ issueId: i3.id, status: "failed", branch: "cohort/3-fix-flaky-refund-test", startedAt: minutes(90), finishedAt: minutes(75), error: "The agent finished without changing any files" });
   job({ issueId: i5.id, status: "succeeded", branch: "cohort/5-document-the-refund-api", startedAt: minutes(300), finishedAt: minutes(280) });
   db.insert(issueComments).values({ issueId: i2.id, authorId: bot.id, body: "Opened !1 from `cohort/2-refactor-checkout`." }).run();
@@ -180,7 +201,7 @@ await seed(db);
 
 const pages = paths.length
   ? paths
-  : ["/", "/work", "/reviews", "/agents", "/acme/api", "/acme/api/issues/2", "/acme/api/merge_requests/1", "/acme/api/workshops/1", "/settings/runners"];
+  : ["/", "/work", "/reviews", "/agents", "/acme/api", "/acme/api/issues/1", "/acme/api/issues/2", "/acme/api/issues/3", "/acme/api/issues/4", "/acme/api/merge_requests/1", "/acme/api/workshops/1"];
 const widths = [1440, 375];
 const schemes = ["dark", "light"] as const;
 

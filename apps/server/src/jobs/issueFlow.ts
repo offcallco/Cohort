@@ -15,7 +15,7 @@ import {
 import { createIssue } from "../issues/service.ts";
 import { createMergeRequest } from "../mrs/service.ts";
 import { slugify } from "../slug.ts";
-import { orderIssues, parseSubtasks } from "../workshops/parse.ts";
+import { orderIssues, parseReply, parseSubtasks } from "../workshops/parse.ts";
 import { JobError, type JobResult, type Jobs } from "./service.ts";
 
 type JobRow = typeof jobs.$inferSelect;
@@ -23,7 +23,6 @@ type IssueRow = typeof issues.$inferSelect;
 
 // Issues with this label are done as one job, without asking the agent to split them.
 export const NO_SPLIT_LABEL = "no-split";
-const DEFAULT_MAX_SUBTASKS = 4;
 
 // What happens to issues as agents work on them:
 //
@@ -77,14 +76,21 @@ export class IssueFlow {
     return this.db.select({ username: users.username }).from(users).where(eq(users.id, botId)).get()!.username;
   }
 
-  private queue(issue: IssueRow, kind: "implement" | "split" | "resolve", botId: number, branch: string, baseBranch: string) {
+  private queue(
+    issue: IssueRow,
+    kind: "implement" | "split" | "resolve",
+    botId: number,
+    branch: string,
+    baseBranch: string,
+    instruction: string | null = null,
+  ) {
     const bot = findBot(this.db, botId)!;
     const row = this.db
       .insert(jobs)
-      .values({ projectId: issue.projectId, issueId: issue.id, kind, botId, agentType: bot.agentType!, branch, baseBranch })
+      .values({ projectId: issue.projectId, issueId: issue.id, kind, botId, agentType: bot.agentType!, branch, baseBranch, instruction })
       .returning()
       .get();
-    const what = { implement: "Queued", split: "Queued to plan how to split", resolve: "Queued to resolve a merge conflict" }[kind];
+    const what = { implement: "Queued", split: "Queued to plan the work", resolve: "Queued to resolve a merge conflict" }[kind];
     this.jobs.logs.append(row.id, `${what} for ${bot.username}\n`);
     this.jobs.dispatcher?.dispatch();
     return row;
@@ -131,7 +137,9 @@ export class IssueFlow {
       const parent = this.issue(issue.parentId!)!;
       return this.queue(issue, "implement", botId, branch, parent.branch!);
     }
-    const kind = this.hasLabel(issue.id, NO_SPLIT_LABEL) ? "implement" : "split";
+    // Plan first, unless there's already a plan to follow or the issue opts out.
+    const planned = issue.plan !== null && (issue.planStatus === "approved" || issue.planStatus === "auto");
+    const kind = planned || this.hasLabel(issue.id, NO_SPLIT_LABEL) ? "implement" : "split";
     return this.queue(issue, kind, botId, branch, base);
   }
 
@@ -208,6 +216,15 @@ export class IssueFlow {
     const issue = job.issueId ? this.issue(job.issueId) : undefined;
     if (!issue) return;
     if (result.status === "canceled") {
+      // Redirected: start again with the person's new instruction.
+      if (issue.pendingInstruction) {
+        const instruction = issue.pendingInstruction;
+        this.db.update(issues).set({ pendingInstruction: null }).where(eq(issues.id, issue.id)).run();
+        const kind = job.kind === "resolve" ? "implement" : job.kind === "split" ? "split" : "implement";
+        this.queue(issue, kind, job.botId, job.branch, job.baseBranch, instruction);
+        this.setStatus(issue.id, "in_progress");
+        return;
+      }
       this.setStatus(issue.id, "todo");
       return;
     }
@@ -219,7 +236,7 @@ export class IssueFlow {
       }
       return;
     }
-    if (job.kind === "split") return this.splitFinished(job, issue, result);
+    if (job.kind === "split") return this.planFinished(job, issue, result);
     if (job.kind === "resolve") return this.childMerged(issue, job.botId);
     if (issue.origin === "split") return this.mergeChild(issue, job.botId);
     return this.openMergeRequest(job, issue, result.summary ?? "");
@@ -249,35 +266,130 @@ export class IssueFlow {
     await this.jobs.pipelines?.forMergeRequest(mr);
   }
 
-  private async splitFinished(job: JobRow, issue: IssueRow, result: JobResult) {
-    const subtasks = parseSubtasks(result.summary ?? "");
-    if (!subtasks || subtasks.length < 2) {
-      this.comment(issue.id, job.botId, "This is small enough to do as one job.");
-      this.queue(issue, "implement", job.botId, job.branch, job.baseBranch);
-      return;
-    }
-    try {
-      orderIssues(subtasks);
-    } catch (e) {
-      this.comment(issue.id, job.botId, `The proposed split didn't hold together (${e instanceof Error ? e.message : e}), so this will be done as one job.`);
-      this.queue(issue, "implement", job.botId, job.branch, job.baseBranch);
-      return;
-    }
-    const limit = result.maxSubtasks ?? DEFAULT_MAX_SUBTASKS;
-    if (subtasks.length > limit) {
+  // The root task a person assigned waits for them to approve the plan. Workshop issues were
+  // planned with the user already, so they carry straight on.
+  private needsPlanApproval(issue: IssueRow) {
+    return issue.origin === "user" && issue.parentId === null;
+  }
+
+  private async planFinished(job: JobRow, issue: IssueRow, result: JobResult) {
+    const text = result.summary ?? "";
+    const plan = parseReply(text).plan;
+    const subtasks = parseSubtasks(text);
+    const split = subtasks && subtasks.length >= 2 ? subtasks : null;
+
+    if (this.needsPlanApproval(issue)) {
       this.db
         .update(issues)
-        .set({ splitProposal: JSON.stringify({ issues: subtasks, limit }), status: "blocked", updatedAt: new Date() })
+        .set({
+          plan: plan ?? "_The agent didn't write a plan._",
+          planStatus: "pending",
+          splitProposal: split ? JSON.stringify({ issues: split, limit: null }) : null,
+          status: "review",
+          updatedAt: new Date(),
+        })
         .where(eq(issues.id, issue.id))
         .run();
       this.comment(
         issue.id,
         job.botId,
-        `I'd split this into ${subtasks.length} sub-issues, which is more than this runner's limit of ${limit}. Approve the split on this issue, or have it done as one job.`,
+        `My plan is ready for your review${split ? `, splitting the work into ${split.length} sub-issues` : ""}. Approve it, ask for changes, or reject it.`,
       );
       return;
     }
-    await this.createSubtasks(issue, subtasks, job.botId);
+    this.db.update(issues).set({ plan, planStatus: "auto" }).where(eq(issues.id, issue.id)).run();
+    await this.carryOut(this.issue(issue.id)!, split ?? [], job.botId, result.maxSubtasks);
+  }
+
+  // After planning: split into sub-issues, or implement as one job. `approvalLimit` is set when
+  // the runner wants splits bigger than that approved.
+  private async carryOut(issue: IssueRow, subtasks: ProposedIssue[], botId: number, approvalLimit?: number) {
+    const gitDir = this.gitDir(issue.projectId);
+    const base = (await defaultBranch(gitDir))!;
+    const oneJob = (why: string) => {
+      this.comment(issue.id, botId, why);
+      this.queue(issue, "implement", botId, this.branchFor(issue), base);
+    };
+    if (subtasks.length < 2) return oneJob("This is small enough to do as one job.");
+    try {
+      orderIssues(subtasks);
+    } catch (e) {
+      return oneJob(`The proposed split didn't hold together (${e instanceof Error ? e.message : e}), so this will be done as one job.`);
+    }
+    if (approvalLimit !== undefined && subtasks.length > approvalLimit) {
+      this.db
+        .update(issues)
+        .set({ splitProposal: JSON.stringify({ issues: subtasks, limit: approvalLimit }), status: "blocked", updatedAt: new Date() })
+        .where(eq(issues.id, issue.id))
+        .run();
+      this.comment(
+        issue.id,
+        botId,
+        `I'd split this into ${subtasks.length} sub-issues, which is more than this runner's limit of ${approvalLimit}. Approve the split on this issue, or have it done as one job.`,
+      );
+      return;
+    }
+    await this.createSubtasks(issue, subtasks, botId);
+  }
+
+  // A person's call on a plan waiting for approval.
+  async decidePlan(issue: IssueRow, decision: "approve" | "changes" | "reject", note: string, userId: number) {
+    if (issue.planStatus !== "pending") throw new JobError("There's no plan waiting for approval");
+    const botId = issue.assigneeId;
+    if (botId === null || !findBot(this.db, botId)) throw new JobError("Assign the issue to an agent first");
+    if (note.trim()) this.comment(issue.id, userId, note.trim());
+
+    if (decision === "approve") {
+      const proposal = issue.splitProposal ? (JSON.parse(issue.splitProposal) as { issues: ProposedIssue[] }).issues : [];
+      this.db.update(issues).set({ planStatus: "approved", splitProposal: null, status: "in_progress", updatedAt: new Date() }).where(eq(issues.id, issue.id)).run();
+      // The person approved the split along with the plan, so no limit applies.
+      await this.carryOut(this.issue(issue.id)!, proposal, botId);
+    } else if (decision === "changes") {
+      if (!note.trim()) throw new JobError("Say what to change, so the agent can revise the plan");
+      this.db.update(issues).set({ planStatus: "changes_requested", splitProposal: null, status: "in_progress", updatedAt: new Date() }).where(eq(issues.id, issue.id)).run();
+      const base = (await defaultBranch(this.gitDir(issue.projectId)))!;
+      this.queue(this.issue(issue.id)!, "split", botId, this.branchFor(issue), base, note.trim());
+    } else {
+      this.db
+        .update(issues)
+        .set({ planStatus: "rejected", splitProposal: null, assigneeId: null, status: "todo", updatedAt: new Date() })
+        .where(eq(issues.id, issue.id))
+        .run();
+      this.comment(issue.id, botId, "Plan rejected. I've unassigned myself.");
+    }
+  }
+
+  // "Request changes" on an issue in review: the agent works again on the same branch.
+  async requestChanges(issue: IssueRow, note: string, userId: number) {
+    if (!note.trim()) throw new JobError("Say what to change, so the agent can act on it");
+    const botId = issue.assigneeId;
+    if (botId === null || !findBot(this.db, botId)) throw new JobError("Assign the issue to an agent first");
+    if (this.jobs.activeForIssue(issue.id)) throw new JobError("The agent is still working; use Redirect instead");
+    if (!issue.branch) throw new JobError("The agent hasn't made any changes yet");
+    const gitDir = this.gitDir(issue.projectId);
+    if (!(await branchSha(gitDir, issue.branch))) throw new JobError(`The branch ${issue.branch} no longer exists`);
+    this.comment(issue.id, userId, `Requested changes:\n\n${note.trim()}`);
+    const base = issue.origin === "split" ? this.issue(issue.parentId!)!.branch! : (await defaultBranch(gitDir))!;
+    this.setStatus(issue.id, "in_progress");
+    return this.queue(issue, "implement", botId, issue.branch, base, note.trim());
+  }
+
+  // "Redirect": stop what the agent is doing and start again with a new instruction.
+  async redirect(issue: IssueRow, note: string, userId: number) {
+    if (!note.trim()) throw new JobError("Give the agent its new instruction");
+    const botId = issue.assigneeId;
+    if (botId === null || !findBot(this.db, botId)) throw new JobError("Assign the issue to an agent first");
+    this.comment(issue.id, userId, `Redirected:\n\n${note.trim()}`);
+    const active = this.jobs.activeForIssue(issue.id);
+    if (active) {
+      // Picked up when the current run reports that it stopped.
+      this.db.update(issues).set({ pendingInstruction: note.trim(), updatedAt: new Date() }).where(eq(issues.id, issue.id)).run();
+      this.jobs.cancel(active);
+      return active;
+    }
+    const base = (await defaultBranch(this.gitDir(issue.projectId)))!;
+    this.setStatus(issue.id, "in_progress");
+    return this.queue(issue, "implement", botId, this.branchFor(issue), base, note.trim());
   }
 
   private async createSubtasks(issue: IssueRow, list: ProposedIssue[], botId: number) {
@@ -318,7 +430,7 @@ export class IssueFlow {
   }
 
   async decideSplit(issue: IssueRow, approve: boolean) {
-    if (!issue.splitProposal) throw new JobError("There's no split waiting for approval");
+    if (!issue.splitProposal || issue.planStatus === "pending") throw new JobError("There's no split waiting for approval");
     const botId = issue.assigneeId;
     if (botId === null || !findBot(this.db, botId)) throw new JobError("Assign the issue to an agent first");
     const proposal = JSON.parse(issue.splitProposal) as { issues: ProposedIssue[] };

@@ -89,7 +89,7 @@ beforeAll(async () => {
       concurrent: 2,
       agents: [agent],
       context: { instructions: "" },
-      split: { max_subtasks: 4, max_depth: 1 },
+      split: { max_subtasks: 4, require_approval: false, max_depth: 1 },
       ci: { enabled: false, timeout_minutes: 60 },
       dataDir: runnerDir,
     },
@@ -222,7 +222,7 @@ describe("session resume", () => {
     };
     const runner = await call("POST", "/api/runners", { name: "resume-runner" });
     client = new RunnerClient(
-      { url: serverUrl, token: runner.body.token, concurrent: 1, agents: [], context: { instructions: "" }, split: { max_subtasks: 4, max_depth: 1 },
+      { url: serverUrl, token: runner.body.token, concurrent: 1, agents: [], context: { instructions: "" }, split: { max_subtasks: 4, require_approval: false, max_depth: 1 },
       ci: { enabled: false, timeout_minutes: 60 }, dataDir: join(tmp, "resume-runner") },
       [resumable],
       { info: () => {}, error: () => {} },

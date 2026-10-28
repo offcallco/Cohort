@@ -25,6 +25,7 @@ import { Pipelines } from "./pipelines/service.ts";
 import { pipelineRoutes } from "./routes/pipelines.ts";
 import { missionRoutes } from "./routes/mission.ts";
 import { MissionService } from "./mission.ts";
+import { StoryService } from "./issues/story.ts";
 import { join } from "node:path";
 
 declare module "fastify" {
@@ -96,7 +97,7 @@ export async function buildApp({ db, reposRoot, logsDir, hub: hubOptions, webDis
   await app.register(tokenRoutes, { db });
   await app.register(workspaceRoutes, { db, reposRoot });
   await app.register(repoRoutes, { db, reposRoot });
-  await app.register(issueRoutes, { db, jobs });
+  await app.register(issueRoutes, { db, jobs, story: new StoryService(db, reposRoot, jobs, pipelines) });
   await app.register(runnerRoutes, { db, hub });
   await app.register(jobRoutes, { db, jobs });
   await app.register(mergeRequestRoutes, { db, reposRoot, jobs, pipelines });

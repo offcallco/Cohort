@@ -162,7 +162,7 @@ export async function mergeMergeRequest(
   });
   const now = new Date();
   db.update(mergeRequests)
-    .set({ status: "merged", mergeSha: sha, mergedAt: now, updatedAt: now })
+    .set({ status: "merged", mergeSha: sha, mergedById: user.id, mergedAt: now, updatedAt: now })
     .where(eq(mergeRequests.id, row.id))
     .run();
   if (issue) db.update(issues).set({ status: "done", updatedAt: now }).where(eq(issues.id, issue.id)).run();
