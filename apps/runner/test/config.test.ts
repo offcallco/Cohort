@@ -51,7 +51,8 @@ describe("implementPrompt", () => {
     branch: "cohort/3-login",
     baseBranch: "main",
     branchExists: false,
-    issue: { number: 3, title: "Login", body: "Add a login form", labels: ["ui"] },
+    issue: { number: 3, title: "Login", body: "Add a login form", labels: ["ui"], plan: null },
+    instruction: null,
     context: "Use tabs.",
     bot: { name: "claude-bot", email: "claude-bot@bots.cohort.local" },
   };

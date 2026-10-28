@@ -5,7 +5,7 @@ import type { AgentAdapter } from "./agents/index.ts";
 import { authArgs, checkout, removeCheckout } from "./checkout.ts";
 import type { RunnerConfig } from "./config.ts";
 import { git, GitCommandError, KeyedLock } from "./git.ts";
-import { implementPrompt, resolvePrompt, splitPrompt } from "./prompt.ts";
+import { implementPrompt, planPrompt, resolvePrompt } from "./prompt.ts";
 
 export interface JobContext {
   serverUrl: string;
@@ -99,16 +99,14 @@ export async function runImplementJob(job: JobSpec, ctx: JobContext): Promise<Jo
 
 // Split: read the code (read-only) and propose sub-issues, or none.
 export async function runSplitJob(job: JobSpec, ctx: JobContext): Promise<JobOutcome> {
-  const maxSubtasks = ctx.split.max_subtasks;
-  if (ctx.split.max_depth < 1) {
-    ctx.log("Splitting is turned off on this runner (max_depth = 0)\n");
-    return { status: "succeeded", summary: "<issues>[]</issues>", maxSubtasks };
-  }
+  const maxSubtasks = ctx.split.require_approval ? ctx.split.max_subtasks : undefined;
+  const allowSplit = ctx.split.max_depth >= 1;
+  if (!allowSplit) ctx.log("Splitting is turned off on this runner (max_depth = 0); planning only\n");
   try {
     return await inWorktree(job, ctx, job.baseBranch, false, async (dir) => {
       const result = await ctx.adapter.plan({
         cwd: dir,
-        prompt: splitPrompt(job, ctx.instructions, maxSubtasks),
+        prompt: planPrompt(job, ctx.instructions, allowSplit ? ctx.split.max_subtasks : 0),
         resume: null,
         env: { ...process.env },
         signal: ctx.signal,

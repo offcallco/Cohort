@@ -8,8 +8,16 @@ export function implementPrompt(job: JobSpec, runnerInstructions: string) {
     if (job.issue.labels.length) parts.push(`Labels: ${job.issue.labels.join(", ")}`);
     parts.push(job.issue.body.trim() ? `Issue description:\n\n${job.issue.body.trim()}` : "The issue has no description.");
   }
+  if (job.issue?.plan?.trim()) parts.push(`The approved plan:\n\n${job.issue.plan.trim()}`);
   if (job.context.trim()) parts.push(`Project instructions:\n\n${job.context.trim()}`);
   if (runnerInstructions.trim()) parts.push(`Runner instructions:\n\n${runnerInstructions.trim()}`);
+  if (job.instruction?.trim()) {
+    parts.push(
+      job.branchExists
+        ? `A person reviewed your earlier work on this branch and asked for changes:\n\n${job.instruction.trim()}`
+        : `A person gave you this instruction:\n\n${job.instruction.trim()}`,
+    );
+  }
   parts.push(
     [
       `The current directory is a git checkout of the repo on a branch for this work, based on ${job.branchExists ? job.branch : job.baseBranch}.`,
@@ -102,30 +110,46 @@ function contexts(job: JobSpec, runnerInstructions: string) {
   return parts;
 }
 
-// Asks the agent whether to split an issue into sub-issues other agents can do in parallel.
-export function splitPrompt(job: JobSpec, runnerInstructions: string, maxSubtasks: number) {
+// Asks the agent for a short plan, and whether to split the work into sub-issues other agents
+// can do in parallel. `maxSubtasks` 0 means splitting is off.
+export function planPrompt(job: JobSpec, runnerInstructions: string, maxSubtasks: number) {
+  const revising = job.instruction && job.issue?.plan;
   return [
-    `You're planning how coding agents should carry out this issue. Split this issue only if it's worth it.`,
+    "You're planning how coding agents should carry out this issue. Don't write any code yet.",
     issueText(job),
     ...contexts(job, runnerInstructions),
     `The current directory is a read-only checkout of ${job.baseBranch}. Read the code as needed; don't change any files.`,
+    ...(revising
+      ? [`Your previous plan:\n\n${job.issue!.plan!.trim()}`, `A person reviewed it and asked for changes:\n\n${job.instruction!.trim()}`]
+      : job.instruction
+        ? [`A person added this instruction:\n\n${job.instruction.trim()}`]
+        : []),
     [
-      "Decide whether to split the issue into sub-issues. Each sub-issue goes to its own agent, works on its",
-      "own branch, and is merged into a shared branch for the issue; the reviewer sees one merge request.",
-      "",
-      "- Most issues should NOT be split. Split only when the work is too big for one focused change AND has",
-      "  parts that are genuinely separate (different files, modules or layers).",
-      `- Use at most ${maxSubtasks} sub-issues. More needs the user's approval, so only go over if you must.`,
-      "- Sub-issues that touch the same files should depend on each other instead of running in parallel,",
-      "  to avoid merge conflicts.",
-      "- Each sub-issue's body says exactly what to build and where, so an agent can do it without the others.",
+      "Write a short plan a reviewer can check in a minute: the approach, the files you'll change, how",
+      "you'll test it, and anything you're unsure about. State uncertainty plainly; don't guess.",
     ].join("\n"),
+    maxSubtasks > 0
+      ? [
+          "Then decide whether to split the issue into sub-issues. Each goes to its own agent on its own",
+          "branch and is merged into a shared branch for the issue; the reviewer still sees one merge request.",
+          "",
+          "- Most issues should NOT be split. Split only when the work is too big for one focused change AND has",
+          "  parts that are genuinely separate (different files, modules or layers).",
+          `- Use at most ${maxSubtasks} sub-issues.`,
+          "- Sub-issues that touch the same files should depend on each other instead of running in parallel.",
+          "- Each sub-issue's body says exactly what to build and where, so an agent can do it alone.",
+        ].join("\n")
+      : "Don't split the issue; one agent will do all of it.",
     [
       "Reply with only this:",
       "",
+      "<plan>",
+      "The plan, in markdown.",
+      "</plan>",
       "<issues>",
-      `[] to do the issue as one job, or a JSON array of sub-issues:`,
-      `[{"key": "short-id", "title": "...", "body": "markdown: what to build, where, how to tell it's done", "labels": ["..."], "dependsOn": ["keys of sub-issues that must be merged first"]}]`,
+      maxSubtasks > 0
+        ? `[] to do the issue as one job, or a JSON array of sub-issues:\n[{"key": "short-id", "title": "...", "body": "markdown: what to build, where, how to tell it's done", "labels": ["..."], "dependsOn": ["keys of sub-issues that must be merged first"]}]`
+        : "[]",
       "</issues>",
     ].join("\n"),
   ].join("\n\n");

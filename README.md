@@ -80,12 +80,20 @@ Agents respect issue dependencies: an issue waits in the queue until the issues 
 done. Assigning a parent issue whose sub-issues you (or a workshop) created assigns all of them;
 they run in dependency order, each with its own MR, and the parent is done when they are.
 
-Before implementing, the agent decides whether the issue should be **split**. If it proposes
+The agent's first step is a **plan**: its approach, the files it'll change, how it'll test, and
+what it's unsure about. For a task you assign directly, the issue waits until you **Approve**,
+**Request changes** (the agent revises the plan with your note) or **Reject** it. Issues from a
+workshop were planned with you already, so they go straight on; so do sub-issues. Once there's
+an MR, **Request changes** sends your note to the agent, which works on the same branch and
+updates the MR. **Redirect** stops a running agent and starts it again with a new instruction.
+
+While planning, the agent also decides whether the issue should be **split**. If it proposes
 two or more sub-issues, they're created and worked on in parallel (within the runner's limits),
 each on a branch cut from the issue's branch and merged back into it when done. A conflict
 between parts gets a job of its own to resolve it. When every part is merged you get **one**
-merge request for the whole issue. A split bigger than `max_subtasks` waits for you to approve
-it (or have it done as one job). Label an issue `no-split` to skip splitting.
+merge request for the whole issue. Splits don't need approval unless the runner sets
+`require_approval = true`, which holds splits bigger than `max_subtasks`. Label an issue
+`no-split` to skip planning and splitting and go straight to code.
 
 `pnpm cohort start` also starts a runner on this machine, configured in
 `~/.cohort/runner/config.toml`:

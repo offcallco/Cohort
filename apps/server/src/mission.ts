@@ -129,10 +129,25 @@ export class MissionService {
     }
 
     // Splits waiting for approval, and failed agent jobs on blocked issues.
-    const blockedOrSplit = this.db.select().from(issues).all().filter((i) => i.splitProposal || i.status === "blocked");
-    for (const issue of blockedOrSplit) {
+    const waiting = this.db.select().from(issues).all().filter((i) => i.planStatus === "pending" || i.splitProposal || i.status === "blocked");
+    for (const issue of waiting) {
       const p = paths.get(issue.projectId)!;
       const href = `/${p.path}/issues/${issue.number}`;
+      if (issue.planStatus === "pending") {
+        const split = issue.splitProposal ? (JSON.parse(issue.splitProposal) as { issues: unknown[] }).issues.length : 0;
+        items.push({
+          id: `plan-${issue.id}`,
+          kind: "plan",
+          title: issue.title,
+          project: p.path,
+          agent: agentName(issue.assigneeId),
+          need: `Approve the plan before the agent writes code${split ? `. It splits the work into ${split} sub-issues.` : "."}`,
+          since: issue.updatedAt.toISOString(),
+          href,
+          action: { label: "Review plan", method: "link" },
+        });
+        continue;
+      }
       if (issue.splitProposal) {
         const proposal = JSON.parse(issue.splitProposal) as { issues: unknown[] };
         items.push({

@@ -80,7 +80,7 @@ async function startRunner(agent: AgentConfig, concurrent = 2) {
     concurrent,
     agents: [agent],
     context: { instructions: "Be brief." },
-    split: { max_subtasks: 4, max_depth: 1 },
+    split: { max_subtasks: 4, require_approval: false, max_depth: 1 },
       ci: { enabled: false, timeout_minutes: 60 },
     dataDir: join(tmp, `runner-${agent.name}`),
   };
@@ -92,8 +92,9 @@ async function startRunner(agent: AgentConfig, concurrent = 2) {
   }, "runner to connect");
 }
 
+// These tests are about running agents, so issues skip the plan step.
 async function newIssue(title: string, body = "") {
-  return (await call("POST", "/api/projects/acme/app/issues", { title, body })).body.issue.number as number;
+  return (await call("POST", "/api/projects/acme/app/issues", { title, body, labels: ["no-split"] })).body.issue.number as number;
 }
 
 beforeAll(async () => {
@@ -141,7 +142,7 @@ describe("agent jobs", () => {
     // The prompt reaches the agent: write it into the repo so the test can check it.
     await startRunner(script("writer", 'printf "%s" "$COHORT_PROMPT" > prompt.txt && echo "Wrote the prompt to prompt.txt"'));
     const n = await newIssue("Add a prompt file", "Put the prompt in prompt.txt");
-    const assigned = await call("PATCH", `/api/projects/acme/app/issues/${n}`, { assignee: "script-bot", labels: ["docs"] });
+    const assigned = await call("PATCH", `/api/projects/acme/app/issues/${n}`, { assignee: "script-bot", labels: ["docs", "no-split"] });
     expect(assigned.status).toBe(200);
 
     const job = await finishedJob(n);
@@ -176,7 +177,7 @@ describe("agent jobs", () => {
     const prompt = (await call("GET", `/api/projects/acme/app/blob?ref=${encodeURIComponent(job.branch)}&path=prompt.txt`)).body.blob.content;
     expect(prompt).toContain(`issue #${n} in acme/app: Add a prompt file`);
     expect(prompt).toContain("Put the prompt in prompt.txt");
-    expect(prompt).toContain("Labels: docs");
+    expect(prompt).toContain("Labels: docs, no-split");
     expect(prompt).toContain("Use tabs.");
     expect(prompt).toContain("Be brief.");
 

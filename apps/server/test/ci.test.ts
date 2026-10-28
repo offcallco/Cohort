@@ -60,7 +60,7 @@ async function startRunner(options: { ci: boolean; agent?: AgentConfig }) {
     concurrent: 3,
     agents: options.agent ? [options.agent] : [],
     context: { instructions: "" },
-    split: { max_subtasks: 4, max_depth: 0 },
+    split: { max_subtasks: 4, require_approval: false, max_depth: 0 },
     ci: { enabled: options.ci, timeout_minutes: 1 },
     dataDir: join(tmp, name),
   };
@@ -221,7 +221,7 @@ describe("merge requests", () => {
     await p.push({ "README.md": "# app\n", ".cohort-ci.yml": ciFile, "answer.txt": "0\n" });
     await call("PATCH", p.api, { pipelinesMustSucceed: true });
 
-    const issue = (await call("POST", `${p.api}/issues`, { title: "Fix the answer", assignee: "script-bot" })).body.issue;
+    const issue = (await call("POST", `${p.api}/issues`, { title: "Fix the answer", assignee: "script-bot", labels: ["no-split"] })).body.issue;
     await until(async () => (await call("GET", `${p.api}/issues/${issue.number}`)).body.issue.status === "review", "agent MR");
 
     const mr = (await call("GET", `${p.api}/merge_requests/1`)).body.mergeRequest;
@@ -242,7 +242,7 @@ describe("merge requests", () => {
     const p = await newProject();
     await p.push({ "README.md": "# app\n", ".cohort-ci.yml": ciFile, "answer.txt": "0\n" });
     await call("PATCH", p.api, { autoRunAgentPipelines: true });
-    const issue = (await call("POST", `${p.api}/issues`, { title: "Fix it again", assignee: "script-bot" })).body.issue;
+    const issue = (await call("POST", `${p.api}/issues`, { title: "Fix it again", assignee: "script-bot", labels: ["no-split"] })).body.issue;
     await until(async () => (await call("GET", `${p.api}/issues/${issue.number}`)).body.issue.status === "review", "agent MR");
     const mr = (await call("GET", `${p.api}/merge_requests/1`)).body.mergeRequest;
     expect(mr.pipeline.status).not.toBe("manual");

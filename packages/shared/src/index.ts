@@ -262,6 +262,8 @@ export interface IssueDetail extends IssueSummary {
   body: string;
   origin: "user" | "workshop" | "split";
   branch: string | null;
+  plan: string | null;
+  planStatus: "pending" | "approved" | "changes_requested" | "rejected" | "auto" | null;
   // A split over the runner's limit, waiting for approval.
   splitProposal: { issues: ProposedIssue[]; limit: number } | null;
   author: User;
@@ -437,6 +439,17 @@ export interface WorkshopDetail extends WorkshopSummary {
   createdIssues: IssueRef[];
 }
 
+export const planDecisionBody = z.object({
+  decision: z.enum(["approve", "changes", "reject"]),
+  // Required for "changes": what the agent should do differently.
+  note: z.string().max(20_000).default(""),
+});
+
+// Request changes / Redirect: an instruction the agent acts on.
+export const instructionBody = z.object({
+  note: z.string().trim().min(1, "Write the instruction for the agent").max(20_000),
+});
+
 export const splitDecisionBody = z.object({
   // true: create the proposed sub-issues; false: do the issue as one job.
   approve: z.boolean(),
@@ -549,4 +562,46 @@ export interface MissionControl {
   needsYou: NeedsYouItem[];
   running: RunCard[];
   recent: Outcome[];
+}
+
+// Work item story (the issue page)
+
+export type StepState = "done" | "current" | "waiting" | "failed" | "pending" | "skipped";
+
+export interface LoopStep {
+  key: "spec" | "plan" | "code" | "test" | "review" | "merge";
+  label: string;
+  state: StepState;
+  // One line: "Approved", "3 files changed", "2 checks passed".
+  detail: string;
+}
+
+export interface TimelineEntry {
+  at: string;
+  actor: string;
+  bot: boolean;
+  text: string;
+  // UI path to the evidence, if any.
+  href: string | null;
+}
+
+export interface WorkItemStory {
+  issue: IssueDetail;
+  steps: LoopStep[];
+  jobs: Job[];
+  mergeRequest:
+    | (MergeRequestSummary & {
+        mergeable: boolean | null;
+        commits: number;
+        files: { path: string; status: FileDiff["status"]; additions: number; deletions: number }[];
+        mergeSha: string | null;
+        pipelinesMustSucceed: boolean;
+      })
+    | null;
+  pipeline: PipelineDetail | null;
+  // The agent's latest summary of its work, in its own words.
+  summary: string | null;
+  // The agent's current run, if one is queued or running.
+  run: RunCard | null;
+  timeline: TimelineEntry[];
 }

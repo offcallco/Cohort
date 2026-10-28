@@ -5,6 +5,8 @@ import {
   ISSUE_STATUSES,
   createCommentBody,
   createIssueBody,
+  instructionBody,
+  planDecisionBody,
   splitDecisionBody,
   updateIssueBody,
   type IssueStatus,
@@ -23,6 +25,7 @@ import {
 } from "../issues/service.ts";
 import { parseBody, requireUser } from "../http.ts";
 import { JobError, type Jobs } from "../jobs/service.ts";
+import type { StoryService } from "../issues/story.ts";
 import { findProject } from "../projects.ts";
 
 interface ProjectParams {
@@ -70,7 +73,7 @@ function guarded<T>(reply: FastifyReply, write: () => T): T | undefined {
   }
 }
 
-export async function issueRoutes(app: FastifyInstance, { db, jobs }: { db: Db; jobs: Jobs }) {
+export async function issueRoutes(app: FastifyInstance, { db, jobs, story }: { db: Db; jobs: Jobs; story: StoryService }) {
   app.addHook("preHandler", requireUser);
 
   // Replies 400 if `assignee` is a bot that can't work on this project yet.
@@ -159,6 +162,13 @@ export async function issueRoutes(app: FastifyInstance, { db, jobs }: { db: Db; 
     return { issue: issueDetail(db, row) };
   });
 
+  // Everything the work item page shows, in one request.
+  app.get<{ Params: IssueParams }>(`${base}/issues/:number/story`, async (request, reply) => {
+    const row = issue(request.params, reply);
+    if (!row) return;
+    return { story: await story.story(row) };
+  });
+
   app.patch<{ Params: IssueParams }>(`${base}/issues/:number`, async (request, reply) => {
     const row = issue(request.params, reply);
     if (!row) return;
@@ -170,6 +180,41 @@ export async function issueRoutes(app: FastifyInstance, { db, jobs }: { db: Db; 
     await jobs.assigneeChanged(updated, row.assigneeId);
     if (updated.status === "done" && row.status !== "done") await jobs.flow.issueDone(updated);
     return { issue: issueDetail(db, findIssue(db, row.projectId, row.number)!) };
+  });
+
+  // Human gate actions. Each runs, then returns the updated issue.
+  const gate = async (reply: FastifyReply, row: { projectId: number; number: number }, action: () => Promise<unknown>) => {
+    try {
+      await action();
+    } catch (e) {
+      if (e instanceof JobError) return reply.code(400).send({ error: e.message });
+      throw e;
+    }
+    return { issue: issueDetail(db, findIssue(db, row.projectId, row.number)!) };
+  };
+
+  app.post<{ Params: IssueParams }>(`${base}/issues/:number/plan`, async (request, reply) => {
+    const row = issue(request.params, reply);
+    if (!row) return;
+    const body = parseBody(planDecisionBody, request.body, reply);
+    if (!body) return;
+    return gate(reply, row, () => jobs.flow.decidePlan(row, body.decision, body.note, request.user!.id));
+  });
+
+  app.post<{ Params: IssueParams }>(`${base}/issues/:number/request-changes`, async (request, reply) => {
+    const row = issue(request.params, reply);
+    if (!row) return;
+    const body = parseBody(instructionBody, request.body, reply);
+    if (!body) return;
+    return gate(reply, row, () => jobs.flow.requestChanges(row, body.note, request.user!.id));
+  });
+
+  app.post<{ Params: IssueParams }>(`${base}/issues/:number/redirect`, async (request, reply) => {
+    const row = issue(request.params, reply);
+    if (!row) return;
+    const body = parseBody(instructionBody, request.body, reply);
+    if (!body) return;
+    return gate(reply, row, () => jobs.flow.redirect(row, body.note, request.user!.id));
   });
 
   // Approve (or decline) a split that was over the runner's limit.

@@ -239,6 +239,8 @@ export function issueDetail(db: Db, row: IssueRow): IssueDetail {
     body: row.body,
     origin: row.origin,
     branch: row.branch,
+    plan: row.plan,
+    planStatus: row.planStatus,
     splitProposal: row.splitProposal ? (JSON.parse(row.splitProposal) as IssueDetail["splitProposal"]) : null,
     author: people.get(row.authorId)!,
     parentIssue: parent ? ref(parent) : null,
