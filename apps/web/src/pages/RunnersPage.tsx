@@ -6,7 +6,8 @@ import { timeAgo } from "../format.ts";
 import { useApi } from "../hooks.ts";
 import { StatusPill } from "../components/StatusPill.tsx";
 
-export function RunnersPage() {
+// `embedded` renders it as a section of the Agents page.
+export function RunnersPage({ embedded = false }: { embedded?: boolean }) {
   const { data, error, reload } = useApi<{ runners: Runner[] }>("/api/runners", { pollMs: 5000 });
   const bots = useApi<{ bots: Bot[] }>("/api/bots", { pollMs: 5000 }).data?.bots ?? [];
   const [name, setName] = useState("");
@@ -44,23 +45,24 @@ limit = 2`
 
   return (
     <>
-      <h1>Runners</h1>
+      {embedded ? <h2 className="section-title">Runners</h2> : <h1>Runners</h1>}
       <p className="muted">
-        Runners run agent jobs. Cohort starts one on this machine automatically; add more to run agents elsewhere.
+        Runners run agent jobs and CI. Cohort starts one on this machine automatically; add more to run agents elsewhere.
       </p>
-
-      <section className="panel">
-        <div className="panel-title">Agents</div>
-        <ul className="list">
-          {bots.map((b) => (
-            <li key={b.id} className="row wrap">
-              <strong>{b.username}</strong>
-              <span className="muted small">{b.agentType}</span>
-              <StatusPill tone={b.available ? "passed" : "idle"} label={b.available ? "Available" : "No runner online"} />
-            </li>
-          ))}
-        </ul>
-      </section>
+      {!embedded && (
+        <section className="panel">
+          <div className="panel-title">Agents</div>
+          <ul className="list">
+            {bots.map((b) => (
+              <li key={b.id} className="row wrap">
+                <strong>{b.username}</strong>
+                <span className="muted small">{b.agentType}</span>
+                <StatusPill tone={b.available ? "passed" : "idle"} label={b.available ? "Available" : "No runner online"} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {error && <p className="error">{error}</p>}
       <section className="panel flush">

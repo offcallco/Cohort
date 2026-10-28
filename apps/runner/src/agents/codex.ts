@@ -41,7 +41,7 @@ export class CodexAgent implements AgentAdapter {
     return { text: summary, sessionId: null, error };
   }
 
-  private async exec({ cwd, prompt, env, signal, log }: RunOptions, mode: string[]): Promise<RunResult> {
+  private async exec({ cwd, prompt, env, signal, log, onSpawn }: RunOptions, mode: string[]): Promise<RunResult> {
     const tmp = mkdtempSync(join(tmpdir(), "cohort-codex-"));
     const lastMessage = join(tmp, "last-message.txt");
     const args = [
@@ -64,6 +64,7 @@ export class CodexAgent implements AgentAdapter {
         cwd,
         env,
         signal,
+        onSpawn,
         onStdoutLine: (line) => {
           if (!line.trim()) return;
           let event: CodexEvent;

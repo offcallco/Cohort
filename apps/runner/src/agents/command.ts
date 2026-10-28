@@ -31,12 +31,13 @@ export class CommandAgent implements AgentAdapter {
     return this.run(options);
   }
 
-  private async run({ cwd, prompt, env, signal, log }: RunOptions, onLine?: (line: string) => void): Promise<RunResult> {
+  private async run({ cwd, prompt, env, signal, log, onSpawn }: RunOptions, onLine?: (line: string) => void): Promise<RunResult> {
     let last = "";
     const { code, stderr } = await runProcess("/bin/sh", ["-c", this.config.command!, ...this.config.args], {
       cwd,
       env: { ...env, COHORT_PROMPT: prompt },
       signal,
+      onSpawn,
       onStdoutLine: (line) => {
         log(`${line}\n`);
         onLine?.(line);

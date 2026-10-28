@@ -16,6 +16,8 @@ export interface JobContext {
   signal: AbortSignal;
   log: (text: string) => void;
   locks: KeyedLock;
+  // Agent processes register here so the run can be paused.
+  onSpawn?: (pid: number) => void;
 }
 
 export interface JobOutcome {
@@ -73,6 +75,7 @@ export async function runImplementJob(job: JobSpec, ctx: JobContext): Promise<Jo
         env: { ...process.env, ...identityEnv(job) },
         signal,
         log,
+        onSpawn: ctx.onSpawn,
       });
       if (signal.aborted) return { status: "canceled" };
       if (result.error) return { status: "failed", error: result.error, summary: result.summary, costUsd: result.costUsd };
@@ -111,6 +114,7 @@ export async function runSplitJob(job: JobSpec, ctx: JobContext): Promise<JobOut
         env: { ...process.env },
         signal: ctx.signal,
         log: ctx.log,
+        onSpawn: ctx.onSpawn,
       });
       if (ctx.signal.aborted) return { status: "canceled" };
       if (result.error) return { status: "failed", error: result.error, costUsd: result.costUsd };
@@ -149,6 +153,7 @@ export async function runResolveJob(job: JobSpec, ctx: JobContext): Promise<JobO
           env: { ...process.env, ...env },
           signal: ctx.signal,
           log: ctx.log,
+          onSpawn: ctx.onSpawn,
         });
         if (ctx.signal.aborted) return { status: "canceled" };
         if (result.error) return { status: "failed", error: result.error };

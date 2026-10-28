@@ -25,7 +25,7 @@ import { MergeRequestsView } from "./pages/project/MergeRequestsView.tsx";
 import { NewMergeRequestView } from "./pages/project/NewMergeRequestView.tsx";
 import { MergeRequestView } from "./pages/project/MergeRequestView.tsx";
 import { SettingsView } from "./pages/project/SettingsView.tsx";
-import { RunnersPage } from "./pages/RunnersPage.tsx";
+import { AgentsPage } from "./pages/AgentsPage.tsx";
 import { AllIssuesPage } from "./pages/AllIssuesPage.tsx";
 import { PipelinesView } from "./pages/project/PipelinesView.tsx";
 import { PipelineView } from "./pages/project/PipelineView.tsx";
@@ -72,7 +72,7 @@ export function App() {
         <Route path="work" element={<AllIssuesPage />} />
         <Route path="issues" element={<Navigate to="/work" replace />} />
         <Route path="reviews" element={<ReviewsPage />} />
-        <Route path="agents" element={<RunnersPage />} />
+        <Route path="agents" element={<AgentsPage />} />
         <Route path="activity" element={<Placeholder title="Activity">Who and what changed what, and when.</Placeholder>} />
         <Route path="settings" element={<SettingsPage />}>
           <Route index element={<Navigate to="/settings/tokens" replace />} />

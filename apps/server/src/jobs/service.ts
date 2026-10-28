@@ -26,6 +26,8 @@ export class JobError extends Error {}
 export interface Dispatcher {
   dispatch(): void;
   cancel(job: JobRow): boolean;
+  // Freezes or unfreezes the run on its runner. False if the runner isn't connected.
+  setPaused(job: JobRow, paused: boolean): boolean;
   waitingReason(agentType: JobRow["agentType"]): string | null;
 }
 
@@ -115,6 +117,15 @@ export class Jobs {
       // Ask the runner; if it's gone, cancel right away.
       if (!this.dispatcher?.cancel(job)) this.finish(job.id, { status: "canceled" });
     }
+  }
+
+  pause(job: JobRow, paused: boolean) {
+    if (job.status !== "running") throw new JobError("Only a running job can be paused");
+    if (paused === (job.pausedAt !== null)) return;
+    if (!this.dispatcher?.setPaused(job, paused)) throw new JobError("The runner for this job isn't connected");
+    this.db.update(jobs).set({ pausedAt: paused ? new Date() : null }).where(eq(jobs.id, job.id)).run();
+    this.logs.append(job.id, paused ? "Paused by a person\n" : "Resumed\n");
+    this.emitStatus(this.get(job.id)!);
   }
 
   // Builds what the runner needs for `job`. `token` is the job's git credential.
@@ -207,6 +218,7 @@ export class Jobs {
         error: result.error ?? null,
         commitSha: result.commitSha ?? null,
         costUsd: result.costUsd ?? null,
+        pausedAt: null,
         tokenHash: null,
         finishedAt: new Date(),
       })
@@ -266,6 +278,7 @@ export class Jobs {
       error: job.error,
       commitSha: job.commitSha,
       costUsd: job.costUsd,
+      pausedAt: job.pausedAt?.toISOString() ?? null,
       mergeRequest: mr?.number ?? null,
       waitingReason:
         job.status === "queued" ? (this.blockedReason(job) ?? this.dispatcher?.waitingReason(job.agentType) ?? null) : null,
@@ -275,6 +288,7 @@ export class Jobs {
     };
   }
 
+  // Newest first. With no filter, jobs from every project.
   list(where: { projectId?: number; issueId?: number; mergeRequestId?: number }, limit = 50): Job[] {
     const conditions = [];
     if (where.projectId !== undefined) conditions.push(eq(jobs.projectId, where.projectId));

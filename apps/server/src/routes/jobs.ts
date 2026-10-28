@@ -5,13 +5,14 @@ import { requireUser } from "../http.ts";
 import { findIssue } from "../issues/service.ts";
 import { JobError, type Jobs } from "../jobs/service.ts";
 import { findProject } from "../projects.ts";
+import type { MissionService } from "../mission.ts";
 
 interface ProjectParams {
   workspace: string;
   project: string;
 }
 
-export async function jobRoutes(app: FastifyInstance, { db, jobs }: { db: Db; jobs: Jobs }) {
+export async function jobRoutes(app: FastifyInstance, { db, jobs, mission }: { db: Db; jobs: Jobs; mission: MissionService }) {
   app.addHook("preHandler", requireUser);
 
   function job(id: string, reply: FastifyReply) {
@@ -35,6 +36,31 @@ export async function jobRoutes(app: FastifyInstance, { db, jobs }: { db: Db; jo
       return { jobs: jobs.list({ issueId: issue.id }) };
     },
   );
+
+  // Agent runs from every project, newest first.
+  app.get<{ Querystring: { limit?: string } }>("/api/jobs", async (request) => ({
+    jobs: jobs.list({}, Math.min(200, Number(request.query.limit) || 100)),
+  }));
+
+  app.get<{ Params: { id: string } }>("/api/jobs/:id/summary", async (request, reply) => {
+    const row = job(request.params.id, reply);
+    if (!row) return;
+    return { run: mission.runSummary(row) };
+  });
+
+  for (const action of ["pause", "resume"] as const) {
+    app.post<{ Params: { id: string } }>(`/api/jobs/:id/${action}`, async (request, reply) => {
+      const row = job(request.params.id, reply);
+      if (!row) return;
+      try {
+        jobs.pause(row, action === "pause");
+      } catch (e) {
+        if (e instanceof JobError) return reply.code(400).send({ error: e.message });
+        throw e;
+      }
+      return { job: jobs.toApi(jobs.get(row.id)!) };
+    });
+  }
 
   app.get<{ Params: { id: string } }>("/api/jobs/:id", async (request, reply) => {
     const row = job(request.params.id, reply);

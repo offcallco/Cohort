@@ -7,6 +7,8 @@ export interface RunOptions {
   env: NodeJS.ProcessEnv;
   signal: AbortSignal;
   log: (text: string) => void;
+  // Registers the agent's process so a person can pause it.
+  onSpawn?: (pid: number) => void;
 }
 
 export interface RunResult {

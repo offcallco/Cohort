@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { issues, jobs, pipelineJobs, pipelines, users, workshopMessages, workshops } from "@cohort/db";
 import type { MissionControl, NeedsYouItem } from "@cohort/shared";
 import { createBranch, repoDir } from "../src/git/repo.ts";
-import { describeProgress } from "../src/mission.ts";
+import { describeProgress, describeSteps } from "../src/mission.ts";
 import { createTestApp, signUp, type App } from "./helpers.ts";
 
 let app: App;
@@ -50,6 +50,32 @@ describe("describeProgress", () => {
     expect(describeProgress(running, "Pushing 2 commits to x", null).phase).toBe("Pushing the changes");
     expect(describeProgress({ kind: "split", status: "running" }, "", null).phase).toBe("Reading the code to plan the work");
     expect(describeProgress({ kind: "implement", status: "queued" }, "", "No runner with codex is online").phase).toBe("No runner with codex is online");
+  });
+});
+
+describe("describeSteps", () => {
+  it("summarizes the log into steps", () => {
+    const log = [
+      "Fetching acme/api",
+      "Checked out main as cohort/1-x",
+      "→ Read /r/worktrees/job-1/src/a.ts",
+      "→ Read /r/worktrees/job-1/src/b.ts",
+      "→ Grep limit",
+      "→ Edit /r/worktrees/job-1/src/a.ts",
+      "→ Bash npm test",
+      "Pushing 1 commit to cohort/1-x",
+    ].join("\n");
+    expect(describeSteps({ kind: "implement", status: "succeeded" }, log)).toEqual([
+      { label: "Checked out the code", detail: null, state: "done" },
+      { label: "Read 2 files", detail: "src/a.ts, src/b.ts", state: "done" },
+      { label: "Searched the code 1 time", detail: null, state: "done" },
+      { label: "Edited 1 file", detail: "src/a.ts", state: "done" },
+      { label: "Ran 1 command", detail: "npm test", state: "done" },
+      { label: "Pushed the changes", detail: "1 commit to cohort/1-x", state: "done" },
+    ]);
+    const running = describeSteps({ kind: "implement", status: "running" }, log.split("\n").slice(0, 4).join("\n"));
+    expect(running.at(-1)).toMatchObject({ label: "Read 2 files", state: "current" });
+    expect(describeSteps({ kind: "implement", status: "failed" }, "").at(-1)).toMatchObject({ label: "Failed", state: "failed" });
   });
 });
 
