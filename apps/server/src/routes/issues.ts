@@ -8,6 +8,7 @@ import {
   splitDecisionBody,
   updateIssueBody,
   type IssueStatus,
+  type User,
 } from "@cohort/shared";
 import {
   IssueError,
@@ -35,14 +36,25 @@ interface ListQuery {
   status?: string;
   label?: string;
   q?: string;
+  // "me", "agents", "none", or a username.
+  assignee?: string;
+  workspace?: string;
 }
 
-function parseFilter(query: ListQuery): ListFilter {
+function parseFilter(db: Db, query: ListQuery, me: User): ListFilter {
   const status =
     query.status === "open" || ISSUE_STATUSES.includes(query.status as IssueStatus)
       ? (query.status as ListFilter["status"])
       : undefined;
-  return { status, label: query.label || undefined, q: query.q?.trim() || undefined };
+  let assignee: ListFilter["assignee"];
+  if (query.assignee === "me") assignee = { userId: me.id };
+  else if (query.assignee === "agents" || query.assignee === "none") assignee = query.assignee;
+  else if (query.assignee) {
+    // An unknown username matches nothing rather than everything.
+    const user = db.select({ id: users.id }).from(users).where(eq(users.username, query.assignee)).get();
+    assignee = { userId: user?.id ?? -1 };
+  }
+  return { status, label: query.label || undefined, q: query.q?.trim() || undefined, assignee };
 }
 
 // Runs a write, turning IssueError into a 400.
@@ -97,19 +109,30 @@ export async function issueRoutes(app: FastifyInstance, { db, jobs }: { db: Db; 
     users: db.select({ id: users.id, username: users.username, kind: users.kind }).from(users).orderBy(asc(users.username)).all(),
   }));
 
+  // Issues from every project, optionally narrowed to one workspace.
+  app.get<{ Querystring: ListQuery }>("/api/issues", async (request, reply) => {
+    const filter = parseFilter(db, request.query, request.user!);
+    if (request.query.workspace) {
+      const w = db.select().from(workspaces).where(eq(workspaces.slug, request.query.workspace)).get();
+      if (!w) return reply.code(404).send({ error: "Workspace not found" });
+      return { issues: listIssues(db, { workspaceId: w.id }, filter) };
+    }
+    return { issues: listIssues(db, "all", filter) };
+  });
+
   app.get<{ Params: { workspace: string }; Querystring: ListQuery }>(
     "/api/workspaces/:workspace/issues",
     async (request, reply) => {
       const w = db.select().from(workspaces).where(eq(workspaces.slug, request.params.workspace)).get();
       if (!w) return reply.code(404).send({ error: "Workspace not found" });
-      return { issues: listIssues(db, { workspaceId: w.id }, parseFilter(request.query)) };
+      return { issues: listIssues(db, { workspaceId: w.id }, parseFilter(db, request.query, request.user!)) };
     },
   );
 
   app.get<{ Params: ProjectParams; Querystring: ListQuery }>(`${base}/issues`, async (request, reply) => {
     const p = project(request.params, reply);
     if (!p) return;
-    return { issues: listIssues(db, { projectId: p.id }, parseFilter(request.query)) };
+    return { issues: listIssues(db, { projectId: p.id }, parseFilter(db, request.query, request.user!)) };
   });
 
   app.get<{ Params: ProjectParams }>(`${base}/labels`, async (request, reply) => {

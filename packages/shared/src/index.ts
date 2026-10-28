@@ -65,6 +65,7 @@ export const RESERVED_SLUGS = [
   "admin",
   "runners",
   "workspaces",
+  "issues",
 ] as const;
 
 export const slug = z

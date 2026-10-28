@@ -119,6 +119,30 @@ describe("issues", () => {
     expect(await titles("status=open&q=landing", "/api/workspaces/acme/issues")).toEqual(["Landing page"]);
   });
 
+  it("lists issues across every workspace", async () => {
+    await call("POST", "/api/workspaces", { name: "Other", slug: "other" });
+    await call("POST", "/api/workspaces/other/projects", { name: "Site", slug: "site" });
+    await call("POST", "/api/projects/other/site/issues", { title: "Fix the footer", assignee: "justin" });
+
+    const all = (await call("GET", "/api/issues?status=all")).body.issues as { title: string; project: string }[];
+    const projectsSeen = [...new Set(all.map((i) => i.project))].sort();
+    expect(projectsSeen).toEqual(["acme/api", "acme/web", "other/site"]);
+
+    const titles = async (query: string) =>
+      ((await call("GET", `/api/issues?${query}`)).body.issues as { title: string }[]).map((i) => i.title).sort();
+    expect(await titles("assignee=me")).toEqual(["Fix the footer"]);
+    expect(await titles("assignee=justin&q=footer")).toEqual(["Fix the footer"]);
+    expect(await titles("assignee=nobody-by-that-name")).toEqual([]);
+    expect((await titles("assignee=none&status=all")).includes("Fix the footer")).toBe(false);
+    expect(await titles("workspace=other")).toEqual(["Fix the footer"]);
+    expect((await call("GET", "/api/issues?workspace=missing")).status).toBe(404);
+    expect((await titles("status=done")).every((t) => t === "Schema")).toBe(true);
+  });
+
+  it("reserves the issues URL", async () => {
+    expect((await call("POST", "/api/workspaces", { name: "Issues", slug: "issues" })).body.error).toBe("That name is reserved");
+  });
+
   it("404s for unknown issues and projects", async () => {
     expect((await call("GET", `${base}/999`)).status).toBe(404);
     expect((await call("GET", `${base}/abc`)).status).toBe(404);

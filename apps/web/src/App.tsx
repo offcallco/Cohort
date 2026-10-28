@@ -22,6 +22,7 @@ import { NewMergeRequestView } from "./pages/project/NewMergeRequestView.tsx";
 import { MergeRequestView } from "./pages/project/MergeRequestView.tsx";
 import { SettingsView } from "./pages/project/SettingsView.tsx";
 import { RunnersPage } from "./pages/RunnersPage.tsx";
+import { AllIssuesPage } from "./pages/AllIssuesPage.tsx";
 import { PipelinesView } from "./pages/project/PipelinesView.tsx";
 import { PipelineView } from "./pages/project/PipelineView.tsx";
 import { WorkshopsView } from "./pages/project/WorkshopsView.tsx";
@@ -64,6 +65,7 @@ export function App() {
       <Route element={<Shell />}>
         <Route index element={<HomePage />} />
         <Route path="new" element={<NewWorkspacePage />} />
+        <Route path="issues" element={<AllIssuesPage />} />
         <Route path="settings/tokens" element={<TokensPage />} />
         <Route path="settings/runners" element={<RunnersPage />} />
         <Route path=":workspace" element={<WorkspacePage />} />
@@ -115,6 +117,7 @@ function Shell() {
           <NavLink to="/" end>
             Workspaces
           </NavLink>
+          <NavLink to="/issues">Issues</NavLink>
           <NavLink to="/settings/runners">Runners</NavLink>
           <NavLink to="/settings/tokens">Access tokens</NavLink>
         </nav>
