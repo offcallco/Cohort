@@ -37,9 +37,9 @@ export async function runWorkshopTurn(job: JobSpec, ctx: JobContext): Promise<Jo
       result = await adapter.plan({ cwd: dir, prompt: workshopPrompt(job, ctx.instructions, true), resume: null, env, signal, log });
     }
     if (signal.aborted) return { status: "canceled" };
-    if (result.error) return { status: "failed", error: result.error };
+    if (result.error) return { status: "failed", error: result.error, costUsd: result.costUsd };
     if (!result.text.trim()) return { status: "failed", error: "The agent didn't reply" };
-    return { status: "succeeded", summary: result.text, sessionId: result.sessionId ?? undefined };
+    return { status: "succeeded", summary: result.text, sessionId: result.sessionId ?? undefined, costUsd: result.costUsd };
   } catch (error) {
     if (signal.aborted) return { status: "canceled" };
     return { status: "failed", error: error instanceof Error ? error.message : String(error) };

@@ -1511,3 +1511,242 @@ button.ci-job.selected {
     flex-wrap: wrap;
   }
 }
+
+/* --- Mission Control, Reviews ------------------------------------------------------------ */
+
+.section {
+  margin-bottom: var(--s6);
+}
+
+.section > h2 {
+  margin-bottom: var(--s3);
+}
+
+.empty-line {
+  color: var(--text-secondary);
+  padding: var(--s4) 0;
+  margin: 0;
+  border-top: 1px solid var(--border);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1) var(--s3);
+  font-size: var(--fs-meta);
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+}
+
+.agent-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  font-size: var(--fs-meta);
+  color: var(--text-secondary);
+}
+
+.stats {
+  display: flex;
+  gap: var(--s5);
+  margin: 0;
+}
+
+.stats div {
+  display: grid;
+  gap: 2px;
+}
+
+.stats dt {
+  font-size: var(--fs-meta);
+  color: var(--text-muted);
+}
+
+.stats dd {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats .stat-waiting dd {
+  color: var(--st-waiting);
+}
+
+.stats .stat-failed dd {
+  color: var(--st-failed);
+}
+
+.need-list,
+.outcome-list {
+  list-style: none;
+  margin: 0 0 var(--s2);
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.need-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--s3);
+  align-items: start;
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.need-icon {
+  margin-top: 2px;
+  color: var(--st-waiting);
+}
+
+.need-failed .need-icon {
+  color: var(--st-failed);
+}
+
+.need-main {
+  display: grid;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.need-title,
+.outcome-title,
+.run-task {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.need-text {
+  color: var(--text-secondary);
+}
+
+.run-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+  gap: var(--s3);
+}
+
+.run-card {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s4);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+}
+
+.run-phase {
+  margin: 0;
+  color: var(--text-secondary);
+  min-height: 21px;
+}
+
+.outcome-row {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr) auto;
+  gap: var(--s3);
+  align-items: center;
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.outcome-row > .pill {
+  justify-self: start;
+}
+
+.outcome-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.outcome-evidence {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  font-size: var(--fs-meta);
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-bottom: var(--s4);
+}
+
+button.chip {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+button.chip:hover {
+  filter: none;
+  background: var(--hover);
+  color: var(--text);
+}
+
+button.chip.active {
+  background: var(--panel-raised);
+  border-color: var(--text-muted);
+  color: var(--text);
+}
+
+.chip-count {
+  font-size: var(--fs-meta);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.skeleton-list {
+  display: grid;
+  gap: var(--s2);
+}
+
+.skeleton {
+  border-radius: var(--r-card);
+  background: linear-gradient(90deg, var(--panel) 0%, var(--panel-raised) 50%, var(--panel) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .need-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .need-row > button {
+    grid-column: 2;
+    justify-self: start;
+  }
+  .outcome-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s1);
+  }
+  .outcome-evidence {
+    justify-items: start;
+    text-align: left;
+  }
+  .stats {
+    gap: var(--s4);
+  }
+}

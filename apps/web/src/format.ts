@@ -30,3 +30,17 @@ export const slugify = (name: string) =>
     .replace(/[^a-z0-9_.-]+/g, "-")
     .replace(/^[-_.]+|[-_.]+$/g, "")
     .slice(0, 64);
+
+// Compact elapsed time: "45s", "6m", "1h 20m".
+export function elapsed(since: string, now = Date.now()) {
+  const seconds = Math.max(0, Math.round((now - new Date(since).getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ${minutes % 60}m`;
+}
+
+export const formatCost = (usd: number) => (usd < 0.01 ? "<$0.01" : `$${usd.toFixed(2)}`);
+
+export const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;

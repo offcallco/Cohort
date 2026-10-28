@@ -323,6 +323,7 @@ export interface Job {
   summary: string | null;
   error: string | null;
   commitSha: string | null;
+  costUsd: number | null;
   mergeRequest: number | null;
   // Why a queued job isn't running yet, e.g. no runner online for its agent.
   waitingReason: string | null;
@@ -481,4 +482,71 @@ export interface PipelineSummary {
 export interface PipelineDetail extends PipelineSummary {
   stages: string[];
   jobs: CiJob[];
+}
+
+// Mission Control and the Reviews inbox
+
+export type NeedKind = "review" | "pipeline" | "plan" | "split" | "failed_job" | "workshop" | "failed_pipeline";
+
+// Something waiting on a person.
+export interface NeedsYouItem {
+  id: string;
+  kind: NeedKind;
+  title: string;
+  project: string;
+  // The agent involved, if any.
+  agent: string | null;
+  // What it needs, in plain English: "Review the changes", "Start the pipeline".
+  need: string;
+  // When it started waiting.
+  since: string;
+  // Where to go to act on it (a UI path).
+  href: string;
+  // The one action for this row. "post" actions run in place; "link" opens href.
+  action: { label: string; method: "link" | "post"; url?: string };
+}
+
+// A live agent run.
+export interface RunCard {
+  jobId: number;
+  agent: string;
+  kind: JobKind;
+  status: "queued" | "running";
+  project: string;
+  task: string;
+  taskHref: string;
+  // What it's doing now, in one sentence.
+  phase: string;
+  startedAt: string | null;
+  // Files the agent has edited so far.
+  filesTouched: number;
+}
+
+export interface Evidence {
+  files: number;
+  additions: number;
+  deletions: number;
+  checksPassed: number;
+  checksFailed: number;
+}
+
+export interface Outcome {
+  id: string;
+  kind: "merged" | "failed" | "canceled";
+  title: string;
+  project: string;
+  agent: string | null;
+  at: string;
+  href: string;
+  // One line of detail, e.g. the failure reason.
+  detail: string | null;
+  evidence: Evidence | null;
+  costUsd: number | null;
+}
+
+export interface MissionControl {
+  counts: { running: number; needsYou: number; failed24h: number };
+  needsYou: NeedsYouItem[];
+  running: RunCard[];
+  recent: Outcome[];
 }

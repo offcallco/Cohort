@@ -13,6 +13,8 @@ export interface RunResult {
   // The agent's final message, used for the MR description and issue comment.
   summary: string;
   error?: string;
+  // What the run cost, if the agent reports it.
+  costUsd?: number;
 }
 
 export interface PlanOptions extends RunOptions {
@@ -24,6 +26,7 @@ export interface PlanResult {
   text: string;
   sessionId: string | null;
   error?: string;
+  costUsd?: number;
   // The session to resume wasn't found; start a fresh one with the full transcript.
   sessionMissing?: boolean;
 }
