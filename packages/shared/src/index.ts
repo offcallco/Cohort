@@ -222,6 +222,10 @@ export type UpdateIssueBody = z.input<typeof updateIssueBody>;
 
 export const createCommentBody = z.object({
   body: z.string().trim().min(1, "Comment can't be empty").max(100_000),
+  // Merge requests only: comment on a line of the diff.
+  path: z.string().min(1).max(1000).optional(),
+  line: z.number().int().positive().optional(),
+  side: z.enum(["old", "new"]).optional(),
 });
 
 export interface Label {
@@ -256,6 +260,10 @@ export interface IssueComment {
   author: User;
   body: string;
   createdAt: string;
+  // Merge request comments on a line of the diff.
+  path?: string | null;
+  line?: number | null;
+  side?: "old" | "new" | null;
 }
 
 export interface IssueDetail extends IssueSummary {
@@ -471,6 +479,8 @@ export interface CiJob {
   allowFailure: boolean;
   runner: string | null;
   error: string | null;
+  // The last lines of a failed job's log, to show what failed without opening it.
+  excerpt: string | null;
   // Why a pending job hasn't started, e.g. no runner takes CI jobs.
   waitingReason: string | null;
   startedAt: string | null;

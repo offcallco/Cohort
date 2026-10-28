@@ -266,6 +266,10 @@ export const mergeRequestComments = sqliteTable("merge_request_comments", {
     .notNull()
     .references(() => users.id),
   body: text("body").notNull(),
+  // Set for comments on a line of the diff: the file, the line number and which side.
+  path: text("path"),
+  line: integer("line"),
+  side: text("side", { enum: ["old", "new"] }),
   createdAt: createdAt(),
 });
 

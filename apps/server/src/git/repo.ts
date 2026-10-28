@@ -269,8 +269,9 @@ export async function commitsBetween(gitDir: string, base: string, head: string)
 }
 
 // What `head` changes relative to where it branched from `base`.
-export async function diffBetween(gitDir: string, base: string, head: string): Promise<FileDiff[]> {
-  return parsePatch(await text(gitDir, ["diff", "--no-color", "--no-ext-diff", "-M", `${base}...${head}`]));
+export async function diffBetween(gitDir: string, base: string, head: string, options: { ignoreWhitespace?: boolean } = {}): Promise<FileDiff[]> {
+  const args = ["diff", "--no-color", "--no-ext-diff", "-M", ...(options.ignoreWhitespace ? ["-w"] : []), `${base}...${head}`];
+  return parsePatch(await text(gitDir, args));
 }
 
 // Tree of `ours` merged with `theirs`, or null when they conflict.

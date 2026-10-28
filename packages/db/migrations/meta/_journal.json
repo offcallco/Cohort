@@ -71,6 +71,13 @@
       "when": 1793228294062,
       "tag": "0009_tough_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793228598188,
+      "tag": "0010_premium_lady_ursula",
+      "breakpoints": true
     }
   ]
 }

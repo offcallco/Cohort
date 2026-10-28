@@ -15,6 +15,14 @@ const FINISHED = new Set(["success", "failed", "canceled", "skipped"]);
 
 export class PipelineError extends Error {}
 
+// The last few lines of output before a CI job failed: usually the failing test and its error.
+export function failureExcerpt(log: string, lines = 8) {
+  const output = log
+    .split("\n")
+    .filter((l) => l.trim() && !/^(Running on runner|Checking out|Job failed|Back in the queue|Cancel requested)/.test(l));
+  return output.slice(-lines).join("\n") || null;
+}
+
 export interface CiDispatcher {
   dispatch(): void;
   cancelCi(job: CiJobRow): boolean;
@@ -329,6 +337,7 @@ export class Pipelines {
       allowFailure: j.allowFailure,
       runner: runner?.name ?? null,
       error: j.error,
+      excerpt: j.status === "failed" ? failureExcerpt(this.logs.tail(j.id, 16 * 1024)) : null,
       waitingReason: j.status === "pending" ? (this.dispatcher?.ciWaitingReason() ?? null) : null,
       startedAt: j.startedAt?.toISOString() ?? null,
       finishedAt: j.finishedAt?.toISOString() ?? null,

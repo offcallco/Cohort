@@ -100,6 +100,7 @@ export async function mergeRequestDetail(
   db: Db,
   reposRoot: string,
   row: MrRow,
+  options: { ignoreWhitespace?: boolean } = {},
 ): Promise<Omit<MergeRequestDetail, "jobs" | "pipeline" | "pipelinesMustSucceed">> {
   const [summary] = summarize(db, [row]);
   const { workspace, project } = projectPath(db, row.projectId);
@@ -129,6 +130,9 @@ export async function mergeRequestDetail(
     author: people.get(c.authorId)!,
     body: c.body,
     createdAt: c.createdAt.toISOString(),
+    path: c.path,
+    line: c.line,
+    side: c.side,
   }));
 
   const ready = base !== null && head !== null;
@@ -137,7 +141,7 @@ export async function mergeRequestDetail(
     description: row.description,
     mergeable: row.status === "open" && ready ? await canMerge(gitDir, base!, head!) : null,
     commits: ready ? await commitsBetween(gitDir, base!, head!) : [],
-    files: ready ? await diffBetween(gitDir, base!, head!) : [],
+    files: ready ? await diffBetween(gitDir, base!, head!, options) : [],
     comments,
     mergeSha: row.mergeSha,
     mergedAt: row.mergedAt?.toISOString() ?? null,
@@ -175,7 +179,15 @@ export function setMergeRequestStatus(db: Db, row: MrRow, status: "open" | "clos
   return findMergeRequest(db, row.projectId, row.number)!;
 }
 
-export function addMergeRequestComment(db: Db, row: MrRow, authorId: number, body: string) {
-  db.insert(mergeRequestComments).values({ mergeRequestId: row.id, authorId, body }).run();
+export function addMergeRequestComment(
+  db: Db,
+  row: MrRow,
+  authorId: number,
+  body: string,
+  at: { path?: string; line?: number; side?: "old" | "new" } = {},
+) {
+  db.insert(mergeRequestComments)
+    .values({ mergeRequestId: row.id, authorId, body, path: at.path ?? null, line: at.line ?? null, side: at.side ?? null })
+    .run();
   db.update(mergeRequests).set({ updatedAt: new Date() }).where(eq(mergeRequests.id, row.id)).run();
 }
