@@ -1,6 +1,8 @@
-import { Navigate, NavLink, Outlet, Route, Routes, useNavigate } from "react-router";
-import { api } from "./api.ts";
+import { Navigate, Route, Routes } from "react-router";
 import { useSession } from "./session.tsx";
+import { AppShell } from "./shell/AppShell.tsx";
+import { Placeholder } from "./pages/Placeholder.tsx";
+import { SettingsPage } from "./pages/SettingsPage.tsx";
 import { AuthPage } from "./pages/AuthPage.tsx";
 import { HomePage } from "./pages/HomePage.tsx";
 import { TokensPage } from "./pages/TokensPage.tsx";
@@ -62,12 +64,23 @@ export function App() {
   }
   return (
     <Routes>
-      <Route element={<Shell />}>
-        <Route index element={<HomePage />} />
+      <Route element={<AppShell />}>
+        <Route
+          index
+          element={<Placeholder title="Mission Control">What needs you, what's running and what just finished will show here.</Placeholder>}
+        />
+        <Route path="repos" element={<HomePage />} />
+        <Route path="work" element={<AllIssuesPage />} />
+        <Route path="issues" element={<Navigate to="/work" replace />} />
+        <Route path="reviews" element={<Placeholder title="Reviews">Everything waiting on you will collect here.</Placeholder>} />
+        <Route path="agents" element={<RunnersPage />} />
+        <Route path="activity" element={<Placeholder title="Activity">Who and what changed what, and when.</Placeholder>} />
+        <Route path="settings" element={<SettingsPage />}>
+          <Route index element={<Navigate to="/settings/tokens" replace />} />
+          <Route path="tokens" element={<TokensPage />} />
+        </Route>
+        <Route path="settings/runners" element={<Navigate to="/agents" replace />} />
         <Route path="new" element={<NewWorkspacePage />} />
-        <Route path="issues" element={<AllIssuesPage />} />
-        <Route path="settings/tokens" element={<TokensPage />} />
-        <Route path="settings/runners" element={<RunnersPage />} />
         <Route path=":workspace" element={<WorkspacePage />} />
         <Route path=":workspace/:project" element={<ProjectLayout />}>
           <Route index element={<TreeView />} />
@@ -94,42 +107,5 @@ export function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
-  );
-}
-
-function Shell() {
-  const { status, refresh } = useSession();
-  const navigate = useNavigate();
-
-  async function logout() {
-    await api("/api/logout", { method: "POST" });
-    await refresh();
-    navigate("/login");
-  }
-
-  return (
-    <div className="shell">
-      <header className="topbar">
-        <NavLink to="/" className="brand">
-          Cohort
-        </NavLink>
-        <nav>
-          <NavLink to="/" end>
-            Workspaces
-          </NavLink>
-          <NavLink to="/issues">Issues</NavLink>
-          <NavLink to="/settings/runners">Runners</NavLink>
-          <NavLink to="/settings/tokens">Access tokens</NavLink>
-        </nav>
-        <div className="spacer" />
-        <span className="muted">{status?.user?.username}</span>
-        <button className="link" onClick={logout}>
-          Sign out
-        </button>
-      </header>
-      <main className="content">
-        <Outlet />
-      </main>
-    </div>
   );
 }

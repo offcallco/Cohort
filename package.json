@@ -12,11 +12,15 @@
     "runner": "tsx apps/runner/src/cli.ts",
     "dev": "pnpm --parallel --filter @cohort/server --filter @cohort/web dev",
     "build": "pnpm --filter @cohort/web build",
-    "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "typecheck": "pnpm -r typecheck && tsc -p scripts",
+    "test": "pnpm -r test",
+    "ui:preview": "pnpm --filter @cohort/web build && tsx scripts/ui-preview.ts"
   },
   "devDependencies": {
+    "@cohort/db": "workspace:*",
     "@types/node": "^26.6.5",
+    "drizzle-orm": "^0.45.4",
+    "playwright-core": "^1.64.1",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

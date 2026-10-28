@@ -2,9 +2,10 @@ import { Link } from "react-router";
 import type { WorkshopSummary } from "@cohort/shared";
 import { timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
+import { StatusPill } from "../../components/StatusPill.tsx";
 import { useProject } from "./ProjectLayout.tsx";
 
-const statusTone = { active: "in_progress", done: "done", closed: "todo" } as const;
+const statusTone = { active: "running", done: "passed", closed: "idle" } as const;
 const statusLabel = { active: "Active", done: "Issues created", closed: "Closed" } as const;
 
 export function WorkshopsView() {
@@ -54,7 +55,7 @@ export function WorkshopsView() {
                       {w.waiting && " · agent is replying"}
                     </div>
                   </div>
-                  <span className={`status status-${statusTone[w.status]}`}>{statusLabel[w.status]}</span>
+                  <StatusPill tone={w.waiting ? "running" : statusTone[w.status]} label={w.waiting ? "Agent replying" : statusLabel[w.status]} />
                 </li>
               ))}
             </ul>

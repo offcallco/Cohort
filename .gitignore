@@ -3,3 +3,5 @@ dist/
 *.tsbuildinfo
 .env
 .DS_Store
+agent-platform-ui-guide.pdf
+ui-preview/
