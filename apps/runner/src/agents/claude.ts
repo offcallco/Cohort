@@ -54,7 +54,7 @@ export class ClaudeCodeAgent implements AgentAdapter {
   }
 
   private async session(
-    { cwd, prompt, env, signal, log }: RunOptions,
+    { cwd, prompt, env, signal, log, onSpawn }: RunOptions,
     permissionMode: string,
     resume: string | null,
   ): Promise<Session> {
@@ -78,6 +78,7 @@ export class ClaudeCodeAgent implements AgentAdapter {
       cwd,
       env,
       signal,
+      onSpawn,
       onStdoutLine: (line) => {
         if (!line.trim()) return;
         let event: StreamEvent;

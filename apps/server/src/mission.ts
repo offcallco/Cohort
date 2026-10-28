@@ -12,7 +12,7 @@ import {
   workspaces,
   type Db,
 } from "@cohort/db";
-import type { Evidence, MissionControl, NeedsYouItem, Outcome, RunCard } from "@cohort/shared";
+import type { Evidence, MissionControl, NeedsYouItem, Outcome, RunCard, RunStep, RunSummary } from "@cohort/shared";
 import { branchSha, defaultBranch, diffBetween, repoDir } from "./git/repo.ts";
 import type { Jobs } from "./jobs/service.ts";
 
@@ -52,6 +52,47 @@ export function describeProgress(job: Pick<JobRow, "kind" | "status">, log: stri
     workshop: "Reading the code to answer you",
   }[job.kind];
   return { phase: phase ?? fallback, filesTouched: edited.size };
+}
+
+// A run's steps, read from its log: checked out, read, searched, edited, ran commands, pushed.
+export function describeSteps(job: Pick<JobRow, "kind" | "status">, log: string): RunStep[] {
+  const clean = (path: string) => path.replace(/^.*\/(worktrees\/job-\d+|workshops\/w-\d+|ci\/job-\d+)\//, "");
+  const read = new Set<string>();
+  const edited = new Set<string>();
+  const commands: string[] = [];
+  let searches = 0;
+  let checkedOut = false;
+  let pushed: string | null = null;
+  let conflicts: string | null = null;
+  for (const line of log.split("\n")) {
+    const tool = line.match(/^→ (\w+)(?: (.*))?$/);
+    if (tool) {
+      const [, name, arg = ""] = tool;
+      if (["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(name!)) edited.add(clean(arg));
+      else if (name === "Read") read.add(clean(arg));
+      else if (name === "Grep" || name === "Glob") searches++;
+      else if (name === "Bash") commands.push(arg);
+    } else if (line.startsWith("$ ")) commands.push(line.slice(2));
+    else if (line.startsWith("Checked out") || line.startsWith("Checking out")) checkedOut = true;
+    else if (line.startsWith("Pushing ")) pushed = line.replace(/^Pushing /, "");
+    else if (line.startsWith("Conflicts in ")) conflicts = line.slice(13);
+  }
+  const list = (items: Iterable<string>, max = 3) => {
+    const all = [...items];
+    return all.length > max ? `${all.slice(0, max).join(", ")} and ${all.length - max} more` : all.join(", ");
+  };
+  const steps: RunStep[] = [];
+  if (checkedOut) steps.push({ label: "Checked out the code", detail: null, state: "done" });
+  if (conflicts) steps.push({ label: "Found merge conflicts", detail: conflicts, state: "done" });
+  if (read.size) steps.push({ label: `Read ${read.size} file${read.size === 1 ? "" : "s"}`, detail: list(read), state: "done" });
+  if (searches) steps.push({ label: `Searched the code ${searches} time${searches === 1 ? "" : "s"}`, detail: null, state: "done" });
+  if (edited.size) steps.push({ label: `Edited ${edited.size} file${edited.size === 1 ? "" : "s"}`, detail: list(edited), state: "done" });
+  if (commands.length) steps.push({ label: `Ran ${commands.length} command${commands.length === 1 ? "" : "s"}`, detail: list(commands.map((c) => c.slice(0, 60)), 2), state: "done" });
+  if (pushed) steps.push({ label: "Pushed the changes", detail: pushed, state: "done" });
+  const last = steps.at(-1);
+  if (last && (job.status === "running" || job.status === "queued")) last.state = "current";
+  if (job.status === "failed") steps.push({ label: "Failed", detail: null, state: "failed" });
+  return steps;
 }
 
 export class MissionService {
@@ -323,6 +364,51 @@ export class MissionService {
     return {
       checksPassed: all.filter((j) => j.status === "success").length,
       checksFailed: all.filter((j) => j.status === "failed").length,
+    };
+  }
+
+  // Everything the run page shows.
+  runSummary(job: JobRow): RunSummary {
+    const api = this.jobs.toApi(job);
+    const log = this.jobs.logs.tail(job.id, 256 * 1024);
+    const { phase, filesTouched } = describeProgress(job, log, api.waitingReason);
+    const issue = job.issueId ? this.db.select().from(issues).where(eq(issues.id, job.issueId)).get() : undefined;
+    const mr = job.mergeRequestId
+      ? this.db.select().from(mergeRequests).where(eq(mergeRequests.id, job.mergeRequestId)).get()
+      : undefined;
+    const pipeline = mr ? this.db.select().from(pipelines).where(eq(pipelines.mergeRequestId, mr.id)).orderBy(desc(pipelines.id)).get() : undefined;
+    const ended = job.status === "succeeded" ? "Finished" : job.status === "failed" ? `Failed: ${job.error ?? "the agent stopped"}` : job.status === "canceled" ? "Stopped" : null;
+    return {
+      job: api,
+      phase: ended ?? (job.pausedAt ? `Paused. ${phase}` : phase),
+      filesTouched,
+      steps: describeSteps(job, log),
+      artifacts: {
+        plan: issue?.plan ?? null,
+        mergeRequest: mr ? { number: mr.number, title: mr.title, files: filesTouched, status: mr.status } : null,
+        pipeline: pipeline ? { ...this.pipelineSummary(pipeline) } : null,
+        summary: job.summary,
+      },
+    };
+  }
+
+  private pipelineSummary(p: typeof pipelines.$inferSelect) {
+    const project = this.projectPaths().get(p.projectId)!;
+    const by = this.db.select({ username: users.username }).from(users).where(eq(users.id, p.triggeredById)).get();
+    const mr = p.mergeRequestId ? this.db.select({ number: mergeRequests.number }).from(mergeRequests).where(eq(mergeRequests.id, p.mergeRequestId)).get() : undefined;
+    return {
+      id: p.id,
+      project: project.path,
+      ref: p.ref,
+      sha: p.sha,
+      status: p.status,
+      source: p.source,
+      triggeredBy: by?.username ?? "",
+      mergeRequest: mr?.number ?? null,
+      error: p.error,
+      createdAt: p.createdAt.toISOString(),
+      startedAt: p.startedAt?.toISOString() ?? null,
+      finishedAt: p.finishedAt?.toISOString() ?? null,
     };
   }
 

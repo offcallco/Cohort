@@ -323,6 +323,13 @@ export class RunnerHub implements Dispatcher, CiDispatcher {
     return best;
   }
 
+  setPaused(job: JobRow, paused: boolean): boolean {
+    const conn = job.runnerId !== null ? this.connections.get(job.runnerId) : undefined;
+    if (!conn || !conn.running.has(job.id)) return false;
+    this.send(conn, { type: paused ? "pause" : "resume", jobId: job.id });
+    return true;
+  }
+
   broadcast(message: ServerMessage) {
     for (const conn of this.connections.values()) this.send(conn, message);
   }

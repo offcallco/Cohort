@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -222,6 +222,46 @@ describe("agent jobs", () => {
     expect(job.status).toBe("canceled");
     expect((await call("GET", `/api/projects/acme/app/issues/${n}`)).body.issue.status).toBe("todo");
   }, 30_000);
+
+  it("pauses and resumes a running agent", async () => {
+    await startRunner(script("ticker", "while true; do date +%s >> ticks; sleep 0.2; done"));
+    const n = await newIssue("Tick forever");
+    await call("PATCH", `/api/projects/acme/app/issues/${n}`, { assignee: "script-bot" });
+    const job = await until(async () => {
+      const [j] = await issueJobs(n);
+      return j?.status === "running" ? j : null;
+    }, "job to start");
+    const ticks = join(tmp, "runner-ticker", "worktrees", `job-${job.id}`, "ticks");
+    const count = () => (existsSync(ticks) ? readFileSync(ticks, "utf8").split("\n").filter(Boolean).length : 0);
+    await until(async () => count() >= 2, "ticks");
+
+    const paused = await call("POST", `/api/jobs/${job.id}/pause`);
+    expect(paused.body.job.pausedAt).not.toBeNull();
+    await new Promise((r) => setTimeout(r, 300));
+    const frozen = count();
+    await new Promise((r) => setTimeout(r, 800));
+    expect(count()).toBe(frozen);
+
+    const resumed = await call("POST", `/api/jobs/${job.id}/resume`);
+    expect(resumed.body.job.pausedAt).toBeNull();
+    await until(async () => count() > frozen, "ticks after resuming");
+
+    // Stopping a paused run works too.
+    await call("POST", `/api/jobs/${job.id}/pause`);
+    await call("POST", `/api/jobs/${job.id}/cancel`);
+    expect((await finishedJob(n)).status).toBe("canceled");
+    expect((await call("POST", `/api/jobs/${job.id}/pause`)).body.error).toBe("Only a running job can be paused");
+  }, 30_000);
+
+  it("summarizes a run's steps and lists runs across projects", async () => {
+    const all = (await call("GET", "/api/jobs")).body.jobs as Job[];
+    expect(all.length).toBeGreaterThan(3);
+    const succeeded = all.find((j) => j.status === "succeeded" && j.kind === "implement")!;
+    const summary = (await call("GET", `/api/jobs/${succeeded.id}/summary`)).body.run;
+    expect(summary).toMatchObject({ phase: "Finished", job: { id: succeeded.id } });
+    expect(summary.steps.map((s: { label: string }) => s.label)).toContain("Checked out the code");
+    expect(summary.steps.map((s: { label: string }) => s.label)).toContain("Pushed the changes");
+  });
 
   it("respects the agent's limit and runs the rest after", async () => {
     // Each job writes its own file so the branches don't conflict.

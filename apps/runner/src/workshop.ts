@@ -31,6 +31,7 @@ export async function runWorkshopTurn(job: JobSpec, ctx: JobContext): Promise<Jo
       env,
       signal,
       log,
+      onSpawn: ctx.onSpawn,
     });
     if (result.sessionMissing && resume) {
       log("Couldn't resume the earlier session; starting a new one with the conversation so far\n");

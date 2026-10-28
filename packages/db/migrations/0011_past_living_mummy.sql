@@ -1,0 +1,1 @@
+ALTER TABLE `jobs` ADD `paused_at` integer;

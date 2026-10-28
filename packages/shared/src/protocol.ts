@@ -111,6 +111,9 @@ export type ServerMessage =
   | { type: "welcome"; runnerId: number; name: string }
   | { type: "assign"; job: JobSpec }
   | { type: "cancel"; jobId: number }
+  // Freeze or unfreeze the agent's processes for a job.
+  | { type: "pause"; jobId: number }
+  | { type: "resume"; jobId: number }
   | { type: "assign_ci"; job: CiJobSpec }
   | { type: "cancel_ci"; jobId: number }
   // The workshop is over; its checkout can be removed.

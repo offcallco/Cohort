@@ -101,10 +101,11 @@ export async function buildApp({ db, reposRoot, logsDir, hub: hubOptions, webDis
   await app.register(reposListRoutes, { db, reposRoot });
   await app.register(issueRoutes, { db, jobs, story: new StoryService(db, reposRoot, jobs, pipelines) });
   await app.register(runnerRoutes, { db, hub });
-  await app.register(jobRoutes, { db, jobs });
+  const mission = new MissionService(db, reposRoot, jobs);
+  await app.register(jobRoutes, { db, jobs, mission });
   await app.register(mergeRequestRoutes, { db, reposRoot, jobs, pipelines });
   await app.register(pipelineRoutes, { db, pipelines });
-  await app.register(missionRoutes, { mission: new MissionService(db, reposRoot, jobs) });
+  await app.register(missionRoutes, { mission });
   await app.register(workshopRoutes, { db, workshops });
   await app.register(gitHttpRoutes, { db, reposRoot, pipelines });
 

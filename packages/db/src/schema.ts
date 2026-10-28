@@ -224,6 +224,8 @@ export const jobs = sqliteTable("jobs", {
   createdAt: createdAt(),
   startedAt: integer("started_at", { mode: "timestamp_ms" }),
   finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+  // Set while a person has paused the run.
+  pausedAt: integer("paused_at", { mode: "timestamp_ms" }),
 });
 
 export const MR_STATUSES = ["open", "merged", "closed"] as const;

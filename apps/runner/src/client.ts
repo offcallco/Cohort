@@ -17,6 +17,9 @@ const MAX_OUTBOX = 2000;
 interface ActiveJob {
   spec: JobSpec;
   abort: AbortController;
+  // The agent's process group, and whether a person paused it.
+  pid: number | null;
+  paused: boolean;
   done: Promise<void>;
   buffer: string;
   timer: NodeJS.Timeout | null;
@@ -91,7 +94,19 @@ export class RunnerClient {
       }
       if (message.type === "welcome") this.logger.info(`Connected to ${this.config.url} as runner "${message.name}"`);
       else if (message.type === "assign") this.accept(message.job);
-      else if (message.type === "cancel") this.active.get(message.jobId)?.abort.abort();
+      else if (message.type === "cancel") {
+        const job = this.active.get(message.jobId);
+        // A frozen process can't handle SIGTERM; wake it so it can stop.
+        if (job?.paused) this.signal(job, "SIGCONT");
+        job?.abort.abort();
+      } else if (message.type === "pause" || message.type === "resume") {
+        const job = this.active.get(message.jobId);
+        if (job) {
+          job.paused = message.type === "pause";
+          this.signal(job, job.paused ? "SIGSTOP" : "SIGCONT");
+          this.logger.info(`Job ${job.spec.id}: ${job.paused ? "paused" : "resumed"}`);
+        }
+      }
       else if (message.type === "assign_ci") this.acceptCi(message.job);
       else if (message.type === "cancel_ci") this.activeCi.get(message.jobId)?.abort.abort();
       else if (message.type === "workshop_closed") {
@@ -155,7 +170,7 @@ export class RunnerClient {
     if (this.active.has(spec.id)) return;
 
     const abort = new AbortController();
-    const job: ActiveJob = { spec, abort, buffer: "", timer: null, done: Promise.resolve() };
+    const job: ActiveJob = { spec, abort, buffer: "", timer: null, done: Promise.resolve(), pid: null, paused: false };
     this.active.set(spec.id, job);
     this.send({ type: "started", jobId: spec.id });
     const what = spec.workshop
@@ -177,6 +192,11 @@ export class RunnerClient {
       signal: abort.signal,
       log,
       locks: this.locks,
+      onSpawn: (pid: number) => {
+        job.pid = pid;
+        // Paused before the agent started: start it frozen.
+        if (job.paused) this.signal(job, "SIGSTOP");
+      },
     };
     const runners = { implement: runImplementJob, workshop: runWorkshopTurn, split: runSplitJob, resolve: runResolveJob };
     const run = runners[spec.kind](spec, context);
@@ -186,6 +206,15 @@ export class RunnerClient {
       this.logger.info(`Job ${spec.id}: ${outcome.status}${outcome.error ? ` (${outcome.error})` : ""}`);
       this.send({ type: "finished", jobId: spec.id, ...outcome });
     });
+  }
+
+  private signal(job: ActiveJob, sig: NodeJS.Signals) {
+    if (!job.pid) return;
+    try {
+      process.kill(-job.pid, sig);
+    } catch {
+      // The process already exited.
+    }
   }
 
   private busy() {

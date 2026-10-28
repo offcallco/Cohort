@@ -6,6 +6,8 @@ export interface ProcessOptions {
   signal: AbortSignal;
   onStdoutLine?: (line: string) => void;
   onStderr?: (text: string) => void;
+  // Called with the process group id once it starts, so callers can pause it.
+  onSpawn?: (pid: number) => void;
 }
 
 // Runs a command in its own process group so cancelling also stops anything it started.
@@ -19,6 +21,7 @@ export function runProcess(command: string, args: string[], options: ProcessOpti
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
     });
+    if (child.pid) options.onSpawn?.(child.pid);
     let stderr = "";
     let partial = "";
     child.stdout.setEncoding("utf8");

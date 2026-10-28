@@ -334,6 +334,8 @@ export interface Job {
   error: string | null;
   commitSha: string | null;
   costUsd: number | null;
+  // When a person paused the run, if it's paused.
+  pausedAt: string | null;
   mergeRequest: number | null;
   // Why a queued job isn't running yet, e.g. no runner online for its agent.
   waitingReason: string | null;
@@ -641,4 +643,28 @@ export interface SearchResult {
   files: string[];
   lines: { path: string; line: number; text: string }[];
   truncated: boolean;
+}
+
+// Agent run detail
+
+export interface RunStep {
+  label: string;
+  // e.g. "src/app.ts, src/app.test.ts" or "npm test".
+  detail: string | null;
+  state: "done" | "current" | "failed";
+}
+
+export interface RunSummary {
+  job: Job;
+  // What it's doing now (or what it did last), in one sentence.
+  phase: string;
+  filesTouched: number;
+  steps: RunStep[];
+  // The deliverables: the plan, the changes, the checks and the agent's own summary.
+  artifacts: {
+    plan: string | null;
+    mergeRequest: { number: number; title: string; files: number; status: MergeRequestStatus } | null;
+    pipeline: PipelineSummary | null;
+    summary: string | null;
+  };
 }

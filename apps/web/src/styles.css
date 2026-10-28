@@ -2673,3 +2673,181 @@ tr.line-target td {
     text-align: left;
   }
 }
+
+/* --- Agent runs ---------------------------------------------------------------------------- */
+
+.steps-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s2);
+}
+
+.run-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1) var(--s3);
+}
+
+.run-step svg {
+  color: var(--st-passed);
+}
+
+.run-step-current svg {
+  color: var(--st-running);
+}
+
+.run-step-failed svg {
+  color: var(--st-failed);
+}
+
+.run-step-label {
+  font-weight: 500;
+}
+
+.artifacts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  gap: var(--s3);
+}
+
+.artifact {
+  display: grid;
+  gap: var(--s2);
+  align-content: start;
+  padding: var(--s4);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--panel);
+  color: var(--text);
+}
+
+a.artifact:hover {
+  background: var(--panel-raised);
+  text-decoration: none;
+}
+
+.artifact > .pill {
+  justify-self: start;
+}
+
+.artifact-wide {
+  grid-column: 1 / -1;
+}
+
+.artifact-kind {
+  font-size: var(--fs-meta);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+details.artifact > summary {
+  cursor: pointer;
+}
+
+.artifact-title {
+  font-weight: 500;
+}
+
+.log-lines {
+  max-height: 70vh;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  background: var(--bg);
+  padding: var(--s2) 0;
+}
+
+button.log-line {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  gap: var(--s3);
+  justify-content: stretch;
+  width: 100%;
+  min-height: 0;
+  padding: 0 var(--s3);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: var(--fs-code) / 1.6 var(--font-mono);
+  font-weight: 400;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+button.log-line:hover {
+  filter: none;
+  background: var(--hover);
+}
+
+.log-n {
+  color: var(--text-muted);
+  text-align: right;
+  user-select: none;
+}
+
+.log-text {
+  overflow-wrap: anywhere;
+}
+
+.log-tool .log-text {
+  color: var(--text-secondary);
+}
+
+.log-system .log-text {
+  color: var(--text-muted);
+}
+
+.log-error .log-text {
+  color: var(--st-failed);
+}
+
+.log-copied {
+  color: var(--st-passed);
+  font-family: var(--font-ui);
+  font-size: var(--fs-meta);
+}
+
+.agent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.agent-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s4);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.runs-table td {
+  vertical-align: top;
+}
+
+@media (max-width: 760px) {
+  .runs-table thead {
+    display: none;
+  }
+  .runs-table tr {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--s1) var(--s3);
+    padding: var(--s3) 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .runs-table td {
+    padding: 0;
+    border: none;
+  }
+  .runs-table td:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+}
