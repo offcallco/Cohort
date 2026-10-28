@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { STATUS_LABELS, type IssueRef, type IssueStatus, type IssueSummary, type Label } from "@cohort/shared";
 import { timeAgo } from "../format.ts";
 import { StatusPill, type Tone } from "./StatusPill.tsx";
+import { Actor } from "./Agent.tsx";
 
 const ISSUE_TONES: Record<IssueStatus, Tone> = {
   todo: "idle",
@@ -43,7 +44,9 @@ export function IssueRow({ issue, showProject }: { issue: IssueSummary; showProj
     <li className="list-row issue-row">
       <div className="issue-main">
         <div className="issue-title">
-          <Link to={`${base}/issues/${issue.number}`}>{issue.title}</Link>
+          <Link to={`${base}/issues/${issue.number}`} data-row>
+            {issue.title}
+          </Link>
           {issue.labels.map((l) => (
             <LabelChip key={l.id} label={l} />
           ))}
@@ -57,7 +60,11 @@ export function IssueRow({ issue, showProject }: { issue: IssueSummary; showProj
         </div>
       </div>
       <div className="issue-meta">
-        {issue.assignee && <span className="muted small">{issue.assignee.username}</span>}
+        {issue.assignee && (
+          <span className="muted small">
+            <Actor name={issue.assignee.username} bot={issue.assignee.kind === "bot"} />
+          </span>
+        )}
         <StatusBadge status={issue.status} />
       </div>
     </li>

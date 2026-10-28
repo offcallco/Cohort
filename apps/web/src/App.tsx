@@ -1,7 +1,7 @@
 import { Navigate, Route, Routes } from "react-router";
 import { useSession } from "./session.tsx";
 import { AppShell } from "./shell/AppShell.tsx";
-import { Placeholder } from "./pages/Placeholder.tsx";
+import { ActivityPage } from "./pages/ActivityPage.tsx";
 import { SettingsPage } from "./pages/SettingsPage.tsx";
 import { MissionControlPage } from "./pages/MissionControlPage.tsx";
 import { ReviewsPage } from "./pages/ReviewsPage.tsx";
@@ -73,7 +73,7 @@ export function App() {
         <Route path="issues" element={<Navigate to="/work" replace />} />
         <Route path="reviews" element={<ReviewsPage />} />
         <Route path="agents" element={<AgentsPage />} />
-        <Route path="activity" element={<Placeholder title="Activity">Who and what changed what, and when.</Placeholder>} />
+        <Route path="activity" element={<ActivityPage />} />
         <Route path="settings" element={<SettingsPage />}>
           <Route index element={<Navigate to="/settings/tokens" replace />} />
           <Route path="tokens" element={<TokensPage />} />

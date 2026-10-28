@@ -4,6 +4,7 @@ import { shortSha, timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
 import { DiffViewer } from "../../components/DiffViewer.tsx";
 import { useProject } from "./ProjectLayout.tsx";
+import { SkeletonRows } from "../../components/Skeleton.tsx";
 
 export function CommitView() {
   const { project, base } = useProject();
@@ -13,7 +14,7 @@ export function CommitView() {
   );
 
   if (error) return <p className="error">{error}</p>;
-  if (!data) return null;
+  if (!data) return <SkeletonRows rows={4} height={48} />;
   const c = data.commit;
   const additions = c.files.reduce((n, f) => n + f.additions, 0);
   const deletions = c.files.reduce((n, f) => n + f.deletions, 0);

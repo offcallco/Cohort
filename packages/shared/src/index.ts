@@ -668,3 +668,15 @@ export interface RunSummary {
     summary: string | null;
   };
 }
+
+// Activity: the audit trail
+
+export interface ActivityEntry {
+  at: string;
+  actor: string;
+  bot: boolean;
+  project: string;
+  // "opened #4 Add CSV export", "merged !2", "started coding #1".
+  text: string;
+  href: string | null;
+}

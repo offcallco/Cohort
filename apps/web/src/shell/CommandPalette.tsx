@@ -79,10 +79,38 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
           })}
         </ul>
         <div className="palette-footer">
-          <span>↑↓ to move</span>
-          <span>↵ to open</span>
-          <span>esc to close</span>
-          <span>g then m / p / w / r / a / s to jump</span>
+          <span>
+            <kbd>↑</kbd> <kbd>↓</kbd> move
+          </span>
+          <span>
+            <kbd>↵</kbd> open
+          </span>
+          <span>
+            <kbd>esc</kbd> close
+          </span>
+        </div>
+        <div className="palette-footer shortcuts" aria-label="Keyboard shortcuts">
+          <span>
+            <kbd>⌘K</kbd> search
+          </span>
+          <span>
+            <kbd>g</kbd> <kbd>m</kbd> Mission Control
+          </span>
+          <span>
+            <kbd>g</kbd> <kbd>r</kbd> Reviews
+          </span>
+          <span>
+            <kbd>g</kbd> <kbd>w</kbd> Work
+          </span>
+          <span>
+            <kbd>j</kbd> <kbd>k</kbd> move in lists
+          </span>
+          <span>
+            <kbd>/</kbd> search a repo
+          </span>
+          <span>
+            <kbd>n</kbd> <kbd>p</kbd> next / previous file in a diff
+          </span>
         </div>
       </div>
     </div>

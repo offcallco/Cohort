@@ -3,9 +3,11 @@ import { Link, useNavigate, useParams } from "react-router";
 import type { Job, ProposedIssue, WorkshopDetail } from "@cohort/shared";
 import { api } from "../../api.ts";
 import { IssueLink } from "../../components/IssueBits.tsx";
+import { AgentName } from "../../components/Agent.tsx";
 import { Markdown } from "../../components/Markdown.tsx";
 import { useApi } from "../../hooks.ts";
 import { useProject } from "./ProjectLayout.tsx";
+import { SkeletonRows } from "../../components/Skeleton.tsx";
 
 export function WorkshopView() {
   const { project, base } = useProject();
@@ -39,7 +41,7 @@ export function WorkshopView() {
   }
 
   if (loadError) return <p className="error">{loadError}</p>;
-  if (!w) return null;
+  if (!w) return <SkeletonRows rows={4} height={64} />;
   const failed = !w.waiting && w.job && (w.job.status === "failed" || w.job.status === "canceled");
 
   return (
@@ -67,7 +69,11 @@ export function WorkshopView() {
         <section className="chat">
           {w.messageList.map((m) => (
             <div key={m.id} className={`bubble bubble-${m.role}`}>
-              {m.role === "agent" && <div className="bubble-who">{w.bot}</div>}
+              {m.role === "agent" && (
+                <div className="bubble-who">
+                  <AgentName name={w.bot} />
+                </div>
+              )}
               {m.role === "system" ? <p>{m.body}</p> : <Markdown source={m.body} />}
             </div>
           ))}

@@ -2851,3 +2851,61 @@ button.log-line:hover {
     grid-row: 1;
   }
 }
+
+/* --- States ------------------------------------------------------------------------------ */
+
+.error-state {
+  border-color: color-mix(in srgb, var(--st-failed) 40%, var(--border));
+  display: grid;
+  gap: var(--s2);
+}
+
+.error-state p {
+  margin: 0;
+}
+
+.activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.activity-list li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: var(--s3);
+  align-items: baseline;
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.activity-main {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.activity-main a {
+  color: var(--text);
+}
+
+.palette-footer kbd {
+  margin: 0;
+}
+
+.palette-footer.shortcuts {
+  border-top: none;
+  padding-top: 0;
+}
+
+[data-row]:focus-visible {
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+@media (max-width: 760px) {
+  .activity-list li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+}
