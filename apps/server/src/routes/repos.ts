@@ -7,8 +7,10 @@ import {
   branches,
   cleanPath,
   commitDetail,
+  lastCommits,
   log,
   repoDir,
+  searchRepo,
   resolveCommit,
   tree,
 } from "../git/repo.ts";
@@ -24,6 +26,8 @@ interface Query {
   ref?: string;
   path?: string;
   page?: string;
+  details?: string;
+  q?: string;
 }
 type Req = FastifyRequest<{ Params: Params; Querystring: Query }>;
 
@@ -83,11 +87,22 @@ export async function repoRoutes(app: FastifyInstance, { db, reposRoot }: { db: 
   app.get<{ Params: Params; Querystring: Query }>(`${base}/tree`, async (request, reply) => {
     const t = await target(request, reply);
     if (!t) return;
-    const entries = await tree(t.gitDir, t.sha, t.path);
-    if (!entries) return reply.code(404).send({ error: "Folder not found" });
+    const plain = await tree(t.gitDir, t.sha, t.path);
+    if (!plain) return reply.code(404).send({ error: "Folder not found" });
+    // ?details=1 adds each entry's last commit, for the file browser.
+    const latest = request.query.details ? await lastCommits(t.gitDir, t.sha, plain.map((e) => e.path)) : null;
+    const entries = latest ? plain.map((e) => ({ ...e, lastCommit: latest.get(e.path) ?? null })) : plain;
     const readmeEntry = entries.find((e) => e.type === "blob" && README.test(e.name));
     const readme = readmeEntry ? await blob(t.gitDir, t.sha, readmeEntry.path) : null;
     return { ref: t.ref, sha: t.sha, path: t.path, entries, readme };
+  });
+
+  app.get<{ Params: Params; Querystring: Query }>(`${base}/search`, async (request, reply) => {
+    const t = await target(request, reply);
+    if (!t) return;
+    const q = request.query.q?.trim() ?? "";
+    if (q.length < 2) return reply.code(400).send({ error: "Search for at least 2 characters" });
+    return { ref: t.ref, ...(await searchRepo(t.gitDir, t.sha, q)) };
   });
 
   app.get<{ Params: Params; Querystring: Query }>(`${base}/blob`, async (request, reply) => {

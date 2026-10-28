@@ -6,7 +6,7 @@ import { SettingsPage } from "./pages/SettingsPage.tsx";
 import { MissionControlPage } from "./pages/MissionControlPage.tsx";
 import { ReviewsPage } from "./pages/ReviewsPage.tsx";
 import { AuthPage } from "./pages/AuthPage.tsx";
-import { HomePage } from "./pages/HomePage.tsx";
+import { ReposPage } from "./pages/ReposPage.tsx";
 import { TokensPage } from "./pages/TokensPage.tsx";
 import { NewWorkspacePage } from "./pages/NewWorkspacePage.tsx";
 import { WorkspacePage } from "./pages/WorkspacePage.tsx";
@@ -68,7 +68,7 @@ export function App() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<MissionControlPage />} />
-        <Route path="repos" element={<HomePage />} />
+        <Route path="repos" element={<ReposPage />} />
         <Route path="work" element={<AllIssuesPage />} />
         <Route path="issues" element={<Navigate to="/work" replace />} />
         <Route path="reviews" element={<ReviewsPage />} />

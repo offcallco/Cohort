@@ -169,6 +169,25 @@ describe("git over HTTP", () => {
     ]);
   });
 
+  it("lists repos with their health", async () => {
+    const repos = (await api("GET", "/api/repos")).body.repos as { slug: string; lastCommit: { subject: string } | null; defaultBranch: string | null }[];
+    const apiRepo = repos.find((r) => r.slug === "api")!;
+    expect(apiRepo).toMatchObject({ defaultBranch: "main", lastCommit: { subject: "Change the answer" }, openIssues: 0, runningJobs: 0, pipeline: null });
+  });
+
+  it("adds each file's last commit to the file browser", async () => {
+    const res = await api("GET", "/api/projects/acme/api/tree?details=1");
+    const byName = Object.fromEntries(res.body.entries.map((e: { name: string; lastCommit: { subject: string } }) => [e.name, e.lastCommit?.subject]));
+    expect(byName).toEqual({ src: "Change the answer", "logo.bin": "First commit", "README.md": "First commit" });
+  });
+
+  it("searches file names and contents", async () => {
+    const res = await api("GET", "/api/projects/acme/api/search?q=ANSWER");
+    expect(res.body.lines).toEqual([{ path: "src/index.ts", line: 1, text: "export const answer = 43;" }]);
+    expect((await api("GET", "/api/projects/acme/api/search?q=index")).body.files).toEqual(["src/index.ts"]);
+    expect((await api("GET", "/api/projects/acme/api/search?q=a")).status).toBe(400);
+  });
+
   it("rejects unsafe refs and paths", async () => {
     expect((await api("GET", "/api/projects/acme/api/tree?ref=--output=/tmp/x")).status).toBe(404);
     expect((await api("GET", "/api/projects/acme/api/tree?path=../../etc")).status).toBe(400);

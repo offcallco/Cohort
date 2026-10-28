@@ -330,3 +330,39 @@ export async function createBranch(gitDir: string, name: string, from: string) {
   const { code, stderr } = await gitWithCode(gitDir, ["update-ref", `refs/heads/${name}`, sha, ""]);
   if (code !== 0 && !(await branchSha(gitDir, name))) throw new GitError(stderr.trim());
 }
+
+// The latest commit that touched each of `paths` (relative to the repo root), at `sha`.
+export async function lastCommits(gitDir: string, sha: string, paths: string[]) {
+  const out = new Map<string, { sha: string; subject: string; date: string }>();
+  await Promise.all(
+    paths.slice(0, 200).map(async (path) => {
+      const line = (await text(gitDir, ["log", "-1", "--format=%H%x00%s%x00%aI", sha, "--", path])).trim();
+      if (!line) return;
+      const [commit = "", subject = "", date = ""] = line.split("\0");
+      out.set(path, { sha: commit, subject, date });
+    }),
+  );
+  return out;
+}
+
+const MAX_SEARCH_LINES = 200;
+
+// File names containing `query`, and lines containing it (case-insensitive, fixed string).
+export async function searchRepo(gitDir: string, sha: string, query: string) {
+  const names = (await text(gitDir, ["ls-tree", "-r", "--name-only", "-z", sha]))
+    .split("\0")
+    .filter((p) => p && p.toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 50);
+  const { code, stdout } = await gitWithCode(gitDir, ["grep", "-n", "-I", "-i", "-F", "--no-color", "-e", query, sha, "--"]);
+  const lines: { path: string; line: number; text: string }[] = [];
+  if (code === 0) {
+    for (const row of stdout.split("\n")) {
+      // "<sha>:<path>:<line>:<text>"
+      const match = row.match(/^[0-9a-f]+:(.+?):(\d+):(.*)$/);
+      if (!match) continue;
+      lines.push({ path: match[1]!, line: Number(match[2]), text: match[3]!.slice(0, 300) });
+      if (lines.length > MAX_SEARCH_LINES) break;
+    }
+  }
+  return { files: names, lines: lines.slice(0, MAX_SEARCH_LINES), truncated: lines.length > MAX_SEARCH_LINES };
+}

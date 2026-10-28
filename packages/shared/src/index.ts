@@ -615,3 +615,30 @@ export interface WorkItemStory {
   run: RunCard | null;
   timeline: TimelineEntry[];
 }
+
+// Repos list, file browser details and code search
+
+export interface RepoSummary {
+  workspace: string;
+  slug: string;
+  name: string;
+  description: string;
+  defaultBranch: string | null;
+  lastCommit: { subject: string; date: string; author: string } | null;
+  openIssues: number;
+  openMergeRequests: number;
+  runningJobs: number;
+  // Latest pipeline on the default branch.
+  pipeline: PipelineStatus | null;
+}
+
+export interface TreeEntryDetail extends TreeEntry {
+  lastCommit: { sha: string; subject: string; date: string } | null;
+}
+
+export interface SearchResult {
+  // Files whose path matches, then lines whose text matches.
+  files: string[];
+  lines: { path: string; line: number; text: string }[];
+  truncated: boolean;
+}
