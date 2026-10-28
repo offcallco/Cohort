@@ -8,12 +8,14 @@ export function SettingsView() {
   const { project } = useProject();
   const [description, setDescription] = useState(project.description);
   const [context, setContext] = useState(project.runnerContext);
+  const [mustSucceed, setMustSucceed] = useState(project.pipelinesMustSucceed);
+  const [autoRun, setAutoRun] = useState(project.autoRunAgentPipelines);
   const [saved, setSaved] = useState(false);
 
   async function save() {
     await api<{ project: Project }>(`/api/projects/${project.workspace}/${project.slug}`, {
       method: "PATCH",
-      body: { description, runnerContext: context },
+      body: { description, runnerContext: context, pipelinesMustSucceed: mustSucceed, autoRunAgentPipelines: autoRun },
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -37,6 +39,21 @@ export function SettingsView() {
               </span>
               <textarea rows={8} value={context} onChange={(e) => setContext(e.target.value)} />
             </label>
+            <fieldset className="stack plain-fieldset">
+              <legend>Pipelines</legend>
+              <label className="checkbox">
+                <input type="checkbox" checked={mustSucceed} onChange={(e) => setMustSucceed(e.target.checked)} />
+                Pipelines must succeed before a merge request can be merged
+              </label>
+              <label className="checkbox">
+                <input type="checkbox" checked={autoRun} onChange={(e) => setAutoRun(e.target.checked)} />
+                Run pipelines on agents' merge requests automatically
+              </label>
+              <span className="muted small">
+                Off by default: an agent's pipeline runs commands from the agent's changes on your runner, so it waits until you
+                start it.
+              </span>
+            </fieldset>
             <div className="row">
               <button type="submit" disabled={busy}>
                 Save

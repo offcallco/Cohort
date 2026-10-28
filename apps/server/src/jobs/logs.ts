@@ -19,11 +19,16 @@ export class JobLogs extends EventEmitter {
 
   append(jobId: number, text: string) {
     const file = this.file(jobId);
-    const size = existsSync(file) ? statSync(file).size : 0;
-    if (size >= MAX_LOG_BYTES) return;
-    const chunk = size + text.length > MAX_LOG_BYTES ? `${text.slice(0, MAX_LOG_BYTES - size)}\n[log truncated]\n` : text;
-    appendFileSync(file, chunk);
-    this.emit(`log:${jobId}`, chunk);
+    try {
+      const size = existsSync(file) ? statSync(file).size : 0;
+      if (size >= MAX_LOG_BYTES) return;
+      const chunk = size + text.length > MAX_LOG_BYTES ? `${text.slice(0, MAX_LOG_BYTES - size)}\n[log truncated]\n` : text;
+      appendFileSync(file, chunk);
+      this.emit(`log:${jobId}`, chunk);
+    } catch (e) {
+      // A log write failing (disk full, folder removed) must not take the job down with it.
+      console.error(`Couldn't write the log for job ${jobId}: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   read(jobId: number) {

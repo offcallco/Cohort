@@ -73,7 +73,7 @@ limit = 2`
                   <strong>{r.name}</strong> <span className={`status status-${r.online ? "done" : "todo"}`}>{r.online ? "Online" : "Offline"}</span>
                   <div className="muted small">
                     {r.online
-                      ? `${r.agents.map((a) => `${a.name} (${a.type}, ${a.limit} at once)`).join(", ") || "No agents"} · ${r.runningJobs} of ${r.concurrent} slots busy`
+                      ? `${r.agents.map((a) => `${a.name} (${a.type}, ${a.limit} at once)`).join(", ") || "No agents"}${r.ci ? " · CI" : ""} · ${r.runningJobs} of ${r.concurrent} slots busy`
                       : r.lastSeenAt
                         ? `Last seen ${timeAgo(r.lastSeenAt)}`
                         : "Never connected"}

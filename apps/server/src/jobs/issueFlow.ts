@@ -245,6 +245,8 @@ export class IssueFlow {
     this.db.update(jobs).set({ mergeRequestId: mr.id }).where(eq(jobs.id, job.id)).run();
     this.setStatus(issue.id, "review");
     this.comment(issue.id, job.botId, `Opened !${mr.number} from \`${job.branch}\`.${summary ? `\n\n${summary}` : ""}`);
+    // After the issue is updated, so nothing sees the job done but the issue not in review.
+    await this.jobs.pipelines?.forMergeRequest(mr);
   }
 
   private async splitFinished(job: JobRow, issue: IssueRow, result: JobResult) {
@@ -397,6 +399,7 @@ export class IssueFlow {
       });
       this.setStatus(parent.id, "review");
       this.comment(parent.id, botId, `All ${kids.length} sub-issues are merged into \`${parent.branch}\`. Opened !${mr.number}.`);
+      await this.jobs.pipelines?.forMergeRequest(mr);
       return;
     }
     if (parent.status !== "done") {

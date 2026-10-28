@@ -100,7 +100,7 @@ export async function mergeRequestDetail(
   db: Db,
   reposRoot: string,
   row: MrRow,
-): Promise<Omit<MergeRequestDetail, "jobs">> {
+): Promise<Omit<MergeRequestDetail, "jobs" | "pipeline" | "pipelinesMustSucceed">> {
   const [summary] = summarize(db, [row]);
   const { workspace, project } = projectPath(db, row.projectId);
   const gitDir = repoDir(reposRoot, workspace, project);

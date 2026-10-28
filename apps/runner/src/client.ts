@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import WebSocket from "ws";
-import type { JobSpec, RunnerMessage, ServerMessage } from "@cohort/shared";
+import type { CiJobSpec, JobSpec, RunnerMessage, ServerMessage } from "@cohort/shared";
+import { runCiJob } from "./ci.ts";
 import type { AgentAdapter } from "./agents/index.ts";
 import type { RunnerConfig } from "./config.ts";
 import { KeyedLock } from "./git.ts";
@@ -32,6 +33,8 @@ export interface ClientLogger {
 export class RunnerClient {
   private socket: WebSocket | null = null;
   private readonly active = new Map<number, ActiveJob>();
+  // CI jobs have their own ids; they share the runner's `concurrent` slots.
+  private readonly activeCi = new Map<number, { abort: AbortController; done: Promise<void> }>();
   private readonly outbox: RunnerMessage[] = [];
   private readonly locks = new KeyedLock();
   private retryMs = 1000;
@@ -52,9 +55,9 @@ export class RunnerClient {
   async stop() {
     this.stopped = true;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    for (const job of this.active.values()) job.abort.abort();
+    for (const job of [...this.active.values(), ...this.activeCi.values()]) job.abort.abort();
     await Promise.race([
-      Promise.all([...this.active.values()].map((j) => j.done)),
+      Promise.all([...this.active.values(), ...this.activeCi.values()].map((j) => j.done)),
       new Promise((r) => setTimeout(r, 10_000)),
     ]);
     this.socket?.close(1000, "Runner stopping");
@@ -73,6 +76,8 @@ export class RunnerClient {
         concurrent: this.config.concurrent,
         agents: this.adapters.map((a) => ({ name: a.name, type: a.type, limit: this.limitFor(a) })),
         running: [...this.active.keys()],
+        ci: this.config.ci.enabled,
+        runningCi: [...this.activeCi.keys()],
       });
       for (const message of this.outbox.splice(0)) this.sendNow(message);
     });
@@ -87,6 +92,8 @@ export class RunnerClient {
       if (message.type === "welcome") this.logger.info(`Connected to ${this.config.url} as runner "${message.name}"`);
       else if (message.type === "assign") this.accept(message.job);
       else if (message.type === "cancel") this.active.get(message.jobId)?.abort.abort();
+      else if (message.type === "assign_ci") this.acceptCi(message.job);
+      else if (message.type === "cancel_ci") this.activeCi.get(message.jobId)?.abort.abort();
       else if (message.type === "workshop_closed") {
         void removeWorkshop(this.config.dataDir, message.workshopId, this.locks).catch(() => undefined);
       }
@@ -142,7 +149,7 @@ export class RunnerClient {
     const adapter = this.adapters.find((a) => a.type === spec.agent);
     if (!adapter) return this.send({ type: "rejected", jobId: spec.id, reason: `No ${spec.agent} agent on this runner` });
     const ofAgent = [...this.active.values()].filter((j) => j.spec.agent === spec.agent).length;
-    if (this.active.size >= this.config.concurrent || ofAgent >= this.limitFor(adapter)) {
+    if (this.busy() >= this.config.concurrent || ofAgent >= this.limitFor(adapter)) {
       return this.send({ type: "rejected", jobId: spec.id, reason: "Runner is at capacity" });
     }
     if (this.active.has(spec.id)) return;
@@ -179,6 +186,46 @@ export class RunnerClient {
       this.logger.info(`Job ${spec.id}: ${outcome.status}${outcome.error ? ` (${outcome.error})` : ""}`);
       this.send({ type: "finished", jobId: spec.id, ...outcome });
     });
+  }
+
+  private busy() {
+    return this.active.size + this.activeCi.size;
+  }
+
+  private acceptCi(spec: CiJobSpec) {
+    if (!this.config.ci.enabled) return this.send({ type: "rejected", jobId: spec.id, reason: "CI is turned off on this runner", ci: true });
+    if (this.busy() >= this.config.concurrent) return this.send({ type: "rejected", jobId: spec.id, reason: "Runner is at capacity", ci: true });
+    if (this.activeCi.has(spec.id)) return;
+
+    const abort = new AbortController();
+    let buffer = "";
+    let timer: NodeJS.Timeout | null = null;
+    const flush = () => {
+      if (timer) clearTimeout(timer);
+      timer = null;
+      if (buffer) this.send({ type: "log", jobId: spec.id, text: buffer, ci: true });
+      buffer = "";
+    };
+    const log = (text: string) => {
+      buffer += text;
+      timer ??= setTimeout(flush, LOG_FLUSH_MS);
+    };
+    this.send({ type: "started", jobId: spec.id, ci: true });
+    this.logger.info(`CI job ${spec.id}: ${spec.name} (${spec.stage}) on ${spec.ref}`);
+    const done = runCiJob(spec, {
+      serverUrl: this.config.url,
+      dataDir: this.config.dataDir,
+      locks: this.locks,
+      timeoutMinutes: this.config.ci.timeout_minutes,
+      signal: abort.signal,
+      log,
+    }).then((outcome) => {
+      flush();
+      this.activeCi.delete(spec.id);
+      this.logger.info(`CI job ${spec.id}: ${outcome.status}${outcome.error ? ` (${outcome.error})` : ""}`);
+      this.send({ type: "finished", jobId: spec.id, ci: true, ...outcome });
+    });
+    this.activeCi.set(spec.id, { abort, done });
   }
 
   private flush(job: ActiveJob) {

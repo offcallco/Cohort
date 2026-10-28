@@ -8,6 +8,7 @@ import { JobStatusPill, MergeRequestPill } from "../../components/Pills.tsx";
 import { shortSha, timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
 import { FileDiffView } from "./CommitView.tsx";
+import { PipelineLink } from "../../components/PipelineBits.tsx";
 import { useProject } from "./ProjectLayout.tsx";
 
 export function MergeRequestView() {
@@ -23,6 +24,16 @@ export function MergeRequestView() {
   const [deleteSource, setDeleteSource] = useState(true);
 
   const current = mr && String(mr.number) === number ? mr : (data?.mergeRequest ?? null);
+
+  async function runPipeline(id: number) {
+    try {
+      await api(`/api/projects/${project.workspace}/${project.slug}/pipelines/${id}/run`, { method: "POST" });
+      const res = await api<{ mergeRequest: MergeRequestDetail }>(url);
+      setMr(res.mergeRequest);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't start the pipeline");
+    }
+  }
 
   async function act(path: string, body?: object) {
     setBusy(true);
@@ -40,6 +51,7 @@ export function MergeRequestView() {
   if (loadError) return <p className="error">{loadError}</p>;
   if (!current) return null;
   const m = current;
+  const pipelineBlocks = m.status === "open" && m.pipelinesMustSucceed && m.pipeline?.status !== "success";
   const additions = m.files.reduce((n, f) => n + f.additions, 0);
   const deletions = m.files.reduce((n, f) => n + f.deletions, 0);
 
@@ -103,6 +115,17 @@ export function MergeRequestView() {
             </section>
           )}
 
+          {m.pipeline && (
+            <section className="panel row spread">
+              <PipelineLink base={base} pipeline={m.pipeline} />
+              {m.pipeline.status === "manual" && (
+                <button className="small" disabled={busy} onClick={() => runPipeline(m.pipeline!.id)}>
+                  Run pipeline
+                </button>
+              )}
+            </section>
+          )}
+
           <section className={`panel merge-box merge-${m.status}`}>
             {m.status === "merged" && (
               <p>
@@ -135,9 +158,15 @@ export function MergeRequestView() {
                   </p>
                 )}
                 {m.mergeable && m.commits.length === 0 && <p className="muted">There's nothing to merge.</p>}
-                {m.mergeable && m.commits.length > 0 && <p>Ready to merge.</p>}
+                {m.mergeable && m.commits.length > 0 && !pipelineBlocks && <p>Ready to merge.</p>}
+                {pipelineBlocks && (
+                  <p className="muted">
+                    This project requires a passing pipeline before merging
+                    {m.pipeline ? ` (the pipeline is ${m.pipeline.status === "manual" ? "waiting to run" : m.pipeline.status}).` : ", and this branch has none."}
+                  </p>
+                )}
                 <div className="row wrap">
-                  <button disabled={busy || !m.mergeable || m.commits.length === 0} onClick={() => act("merge", { deleteSourceBranch: deleteSource })}>
+                  <button disabled={busy || !m.mergeable || m.commits.length === 0 || pipelineBlocks} onClick={() => act("merge", { deleteSourceBranch: deleteSource })}>
                     Merge
                   </button>
                   <label className="checkbox">

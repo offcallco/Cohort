@@ -1,9 +1,10 @@
 import type { WebSocket } from "ws";
 import { and, asc, eq } from "drizzle-orm";
-import { jobs, projects, runners, users, type Db } from "@cohort/db";
+import { jobs, pipelineJobs, projects, runners, users, type Db } from "@cohort/db";
 import { runnerMessage, type AgentInfo, type RunnerMessage, type ServerMessage } from "@cohort/shared";
 import { randomToken, sha256 } from "../auth.ts";
 import type { Dispatcher, Jobs } from "../jobs/service.ts";
+import { CI_TOKEN_PREFIX, type CiDispatcher, type Pipelines } from "../pipelines/service.ts";
 
 type JobRow = typeof jobs.$inferSelect;
 
@@ -18,14 +19,19 @@ interface Connection {
   agents: AgentInfo[];
   // Jobs this runner is working on.
   running: Map<number, JobRow["agentType"]>;
+  // Whether it takes CI jobs, and the CI jobs it's running. They share `concurrent`.
+  ci: boolean;
+  runningCi: Set<number>;
 }
+
+const busy = (conn: Connection) => conn.running.size + conn.runningCi.size;
 
 export interface HubOptions {
   // How long a runner may stay disconnected before its running jobs fail.
   graceMs?: number;
 }
 
-export class RunnerHub implements Dispatcher {
+export class RunnerHub implements Dispatcher, CiDispatcher {
   private readonly connections = new Map<number, Connection>();
   private readonly lostTimers = new Map<number, NodeJS.Timeout>();
   private readonly graceMs: number;
@@ -37,15 +43,20 @@ export class RunnerHub implements Dispatcher {
   constructor(
     private readonly db: Db,
     private readonly jobs: Jobs,
+    private readonly pipelines: Pipelines,
     options: HubOptions = {},
   ) {
     this.graceMs = options.graceMs ?? 60_000;
     jobs.dispatcher = this;
+    pipelines.dispatcher = this;
   }
 
   // After a server restart, jobs left "running" fail unless their runner reconnects in time.
   start() {
-    const orphaned = this.db.select({ runnerId: jobs.runnerId }).from(jobs).where(eq(jobs.status, "running")).all();
+    const orphaned = [
+      ...this.db.select({ runnerId: jobs.runnerId }).from(jobs).where(eq(jobs.status, "running")).all(),
+      ...this.db.select({ runnerId: pipelineJobs.runnerId }).from(pipelineJobs).where(eq(pipelineJobs.status, "running")).all(),
+    ];
     for (const runnerId of new Set(orphaned.map((j) => j.runnerId))) this.scheduleLost(runnerId);
   }
 
@@ -65,7 +76,7 @@ export class RunnerHub implements Dispatcher {
 
   info(runnerId: number) {
     const conn = this.connections.get(runnerId);
-    return conn ? { agents: conn.agents, concurrent: conn.concurrent, running: conn.running.size } : null;
+    return conn ? { agents: conn.agents, concurrent: conn.concurrent, running: busy(conn), ci: conn.ci } : null;
   }
 
   availableAgentTypes() {
@@ -102,10 +113,12 @@ export class RunnerHub implements Dispatcher {
           concurrent: message.concurrent,
           agents: message.agents,
           running: new Map(),
+          ci: message.ci,
+          runningCi: new Set(),
         };
         this.connections.set(runner.id, conn);
         this.clearLost(runner.id);
-        this.reconcile(conn, message.running);
+        this.reconcile(conn, message.running, message.runningCi);
         this.touch(runner.id);
         this.send(conn, { type: "welcome", runnerId: runner.id, name: runner.name });
         this.dispatch();
@@ -120,12 +133,13 @@ export class RunnerHub implements Dispatcher {
       if (conn && this.connections.get(runner.id) === conn) {
         this.connections.delete(runner.id);
         this.touch(runner.id);
-        if (conn.running.size > 0) this.scheduleLost(runner.id);
+        if (busy(conn) > 0) this.scheduleLost(runner.id);
       }
     });
   }
 
   private async handle(conn: Connection, message: Exclude<RunnerMessage, { type: "hello" }>) {
+    if (message.ci) return this.handleCi(conn, message);
     const owned = conn.running.has(message.jobId);
     if (!owned) return;
     switch (message.type) {
@@ -148,8 +162,32 @@ export class RunnerHub implements Dispatcher {
     }
   }
 
+  private handleCi(conn: Connection, message: Exclude<RunnerMessage, { type: "hello" }>) {
+    if (!conn.runningCi.has(message.jobId)) return;
+    switch (message.type) {
+      case "started":
+        break;
+      case "log":
+        this.pipelines.log(message.jobId, message.text);
+        break;
+      case "rejected":
+        conn.runningCi.delete(message.jobId);
+        this.pipelines.requeue(message.jobId, message.reason);
+        setTimeout(() => this.dispatch(), 1000);
+        break;
+      case "finished":
+        conn.runningCi.delete(message.jobId);
+        this.pipelines.finished(message.jobId, message);
+        break;
+    }
+  }
+
   // Jobs the database thinks this runner has but the runner doesn't know about are lost.
-  private reconcile(conn: Connection, stillRunning: number[]) {
+  private reconcile(conn: Connection, stillRunning: number[], stillRunningCi: number[]) {
+    for (const job of this.pipelines.runningOn(conn.runnerId)) {
+      if (stillRunningCi.includes(job.id)) conn.runningCi.add(job.id);
+      else this.pipelines.finished(job.id, { status: "failed", error: "The runner restarted and lost this job" });
+    }
     const rows = this.db
       .select()
       .from(jobs)
@@ -175,6 +213,13 @@ export class RunnerHub implements Dispatcher {
         for (const job of this.db.select().from(jobs).where(where).all()) {
           if (job.runnerId !== null && this.connections.has(job.runnerId)) continue;
           void this.jobs.finish(job.id, { status: "failed", error: "Lost contact with the runner" });
+        }
+        const ciWhere = runnerId === null
+          ? eq(pipelineJobs.status, "running")
+          : and(eq(pipelineJobs.status, "running"), eq(pipelineJobs.runnerId, runnerId));
+        for (const job of this.db.select().from(pipelineJobs).where(ciWhere).all()) {
+          if (job.runnerId !== null && this.connections.has(job.runnerId)) continue;
+          this.pipelines.finished(job.id, { status: "failed", error: "Lost contact with the runner" });
         }
       }, this.graceMs),
     );
@@ -228,6 +273,37 @@ export class RunnerHub implements Dispatcher {
       if (!this.connections.has(conn.runnerId)) continue;
       this.send(conn, { type: "assign", job: spec });
     }
+
+    for (const job of this.pipelines.pendingJobs()) {
+      const conn = this.pickCiRunner();
+      if (!conn) break;
+      const token = CI_TOKEN_PREFIX + randomToken();
+      conn.runningCi.add(job.id);
+      this.pipelines.assigned(job.id, conn.runnerId, token);
+      this.send(conn, { type: "assign_ci", job: this.pipelines.spec(this.pipelines.getJob(job.id)!, token) });
+    }
+  }
+
+  private pickCiRunner(): Connection | null {
+    let best: Connection | null = null;
+    for (const conn of this.connections.values()) {
+      if (!conn.ci || busy(conn) >= conn.concurrent) continue;
+      if (!best || busy(conn) < busy(best)) best = conn;
+    }
+    return best;
+  }
+
+  ciWaitingReason() {
+    if (![...this.connections.values()].some((c) => c.ci)) return "No runner that takes CI jobs is online";
+    return "Waiting for a free slot on a runner";
+  }
+
+  cancelCi(job: typeof pipelineJobs.$inferSelect): boolean {
+    const conn = job.runnerId !== null ? this.connections.get(job.runnerId) : undefined;
+    if (!conn || !conn.runningCi.has(job.id)) return false;
+    this.pipelines.log(job.id, "Cancel requested\n");
+    this.send(conn, { type: "cancel_ci", jobId: job.id });
+    return true;
   }
 
   // Least busy runner with a free slot for `agentType`, or `preferred` when it has one
@@ -238,9 +314,9 @@ export class RunnerHub implements Dispatcher {
       const agent = conn.agents.find((a) => a.type === agentType);
       if (!agent) continue;
       const ofAgent = [...conn.running.values()].filter((t) => t === agentType).length;
-      if (conn.running.size >= conn.concurrent || ofAgent >= agent.limit) continue;
+      if (busy(conn) >= conn.concurrent || ofAgent >= agent.limit) continue;
       if (conn.runnerId === preferred) return conn;
-      if (!best || conn.running.size < best.running.size) best = conn;
+      if (!best || busy(conn) < busy(best)) best = conn;
     }
     return best;
   }

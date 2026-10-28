@@ -37,6 +37,12 @@ max_subtasks = 4
 # 0 turns splitting off; 1 lets issues split once.
 max_depth = 1
 
+# CI jobs from each repo's .cohort-ci.yml. They run shell commands from the repo on this
+# machine. Pipelines for agents' changes wait until you start them (see project settings).
+[ci]
+enabled = true
+timeout_minutes = 60
+
 [context]
 # Extra instructions sent with every job on this runner.
 instructions = """

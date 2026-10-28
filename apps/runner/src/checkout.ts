@@ -13,7 +13,7 @@ export const authArgs = (job: JobSpec) => ["-c", "credential.helper=", "-c", `ht
 // created at `startPoint`; otherwise it's detached.
 export async function checkout(
   job: JobSpec,
-  options: { serverUrl: string; dataDir: string; locks: KeyedLock; dir: string; startPoint: string; branch?: string },
+  options: { serverUrl: string; dataDir: string; locks: KeyedLock; dir: string; startPoint: string; branch?: string; commit?: boolean },
 ) {
   const cache = cachePath(options.dataDir, job.project);
   const url = `${options.serverUrl}${job.clonePath}`;
@@ -28,7 +28,9 @@ export async function checkout(
     rmSync(options.dir, { recursive: true, force: true });
     await git(["--git-dir", cache, "worktree", "prune"]);
     const target = options.branch ? ["-B", options.branch] : ["--detach"];
-    await git(["--git-dir", cache, "worktree", "add", "--quiet", "--force", ...target, options.dir, `refs/remotes/origin/${options.startPoint}`]);
+    // `commit`: startPoint is a commit sha rather than a branch name.
+    const start = options.commit ? options.startPoint : `refs/remotes/origin/${options.startPoint}`;
+    await git(["--git-dir", cache, "worktree", "add", "--quiet", "--force", ...target, options.dir, start]);
   });
 }
 

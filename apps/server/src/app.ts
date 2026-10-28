@@ -21,6 +21,9 @@ import { jobRoutes } from "./routes/jobs.ts";
 import { mergeRequestRoutes } from "./routes/mrs.ts";
 import { workshopRoutes } from "./routes/workshops.ts";
 import { Workshops } from "./workshops/service.ts";
+import { Pipelines } from "./pipelines/service.ts";
+import { pipelineRoutes } from "./routes/pipelines.ts";
+import { join } from "node:path";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -29,6 +32,7 @@ declare module "fastify" {
   interface FastifyInstance {
     hub: RunnerHub;
     jobs: Jobs;
+    pipelines: Pipelines;
   }
 }
 
@@ -64,13 +68,16 @@ export async function buildApp({ db, reposRoot, logsDir, hub: hubOptions, webDis
 
   ensureBots(db);
   const jobs = new Jobs(db, reposRoot, new JobLogs(logsDir));
-  const hub = new RunnerHub(db, jobs, hubOptions);
+  const pipelines = new Pipelines(db, reposRoot, new JobLogs(join(logsDir, "ci")));
+  jobs.pipelines = pipelines;
+  const hub = new RunnerHub(db, jobs, pipelines, hubOptions);
   const workshops = new Workshops(db, reposRoot, jobs);
   workshops.broadcaster = hub;
   hub.start();
   app.addHook("onClose", async () => hub.stop());
   app.decorate("hub", hub);
   app.decorate("jobs", jobs);
+  app.decorate("pipelines", pipelines);
 
   app.decorateRequest("user", null);
   app.addHook("onRequest", async (request) => {
@@ -90,9 +97,10 @@ export async function buildApp({ db, reposRoot, logsDir, hub: hubOptions, webDis
   await app.register(issueRoutes, { db, jobs });
   await app.register(runnerRoutes, { db, hub });
   await app.register(jobRoutes, { db, jobs });
-  await app.register(mergeRequestRoutes, { db, reposRoot, jobs });
+  await app.register(mergeRequestRoutes, { db, reposRoot, jobs, pipelines });
+  await app.register(pipelineRoutes, { db, pipelines });
   await app.register(workshopRoutes, { db, workshops });
-  await app.register(gitHttpRoutes, { db, reposRoot });
+  await app.register(gitHttpRoutes, { db, reposRoot, pipelines });
 
   const serveWeb = webDist !== undefined && existsSync(webDist);
   if (serveWeb) await app.register(fastifyStatic, { root: webDist, wildcard: false });

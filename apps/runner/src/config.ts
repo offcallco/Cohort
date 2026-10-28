@@ -37,6 +37,14 @@ const runnerConfig = z.object({
       max_depth: z.number().int().min(0).max(1).default(1),
     })
     .default({ max_subtasks: 4, max_depth: 1 }),
+  ci: z
+    .object({
+      // Run CI jobs from .cohort-ci.yml. They run shell commands from the repo on this machine.
+      enabled: z.boolean().default(true),
+      // A CI job running longer than this is stopped and fails.
+      timeout_minutes: z.number().positive().default(60),
+    })
+    .default({ enabled: true, timeout_minutes: 60 }),
 });
 
 export type RunnerConfig = z.infer<typeof runnerConfig> & { dataDir: string };

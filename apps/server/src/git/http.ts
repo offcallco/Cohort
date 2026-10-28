@@ -4,6 +4,8 @@ import type { Db } from "@cohort/db";
 import { userForAccessToken } from "../auth.ts";
 import { findProject } from "../projects.ts";
 import { userForJobToken } from "../runners/hub.ts";
+import { branches, repoDir } from "./repo.ts";
+import type { Pipelines } from "../pipelines/service.ts";
 
 // Git smart HTTP (clone, fetch, push), delegated to `git http-backend` as a CGI program.
 // Auth is an access token, sent as the password (any username) or as a Bearer token.
@@ -35,7 +37,7 @@ function challenge(reply: FastifyReply, message: string) {
 
 export async function gitHttpRoutes(
   app: FastifyInstance,
-  { db, reposRoot }: { db: Db; reposRoot: string },
+  { db, reposRoot, pipelines }: { db: Db; reposRoot: string; pipelines: Pipelines },
 ) {
   // Leave git request bodies unread; they are streamed straight into git http-backend.
   app.addContentTypeParser(
@@ -50,13 +52,18 @@ export async function gitHttpRoutes(
 
     // Access tokens work for every repo; job tokens only for their job's repo while it runs.
     const token = tokenFromRequest(request);
+    const ciUser = token && found ? pipelines.userForToken(token, found.id) : null;
     const user = token
-      ? (userForAccessToken(db, token) ?? (found ? userForJobToken(db, token, found.id) : null))
+      ? (userForAccessToken(db, token) ?? (found ? userForJobToken(db, token, found.id) : null) ?? ciUser)
       : null;
     if (!user) return challenge(reply, token ? "Invalid access token." : "Authentication required.");
     if (!found) return reply.code(404).type("text/plain").send("Repository not found.\n");
 
     const query = request.url.includes("?") ? request.url.slice(request.url.indexOf("?") + 1) : "";
+    const pushing = rest === "git-receive-pack" || new URLSearchParams(query).get("service") === "git-receive-pack";
+    // CI jobs can read the repo, never write to it.
+    if (pushing && ciUser) return reply.code(403).type("text/plain").send("CI jobs can't push.\n");
+
     if (rest === "info/refs") {
       const service = new URLSearchParams(query).get("service");
       // Only the smart protocol is served.
@@ -86,9 +93,25 @@ export async function gitHttpRoutes(
       if (typeof value === "string") env[variable] = value;
     }
 
+    // After a person pushes, start pipelines for the branches that moved. Agents' pushes get
+    // pipelines through their merge requests instead.
+    const gitDir = repoDir(reposRoot, workspace, project);
+    const before = rest === "git-receive-pack" && user.kind === "human" ? new Map((await branches(gitDir)).map((b) => [b.name, b.sha])) : null;
+
     reply.hijack();
     const res = reply.raw;
     const child = spawn("git", ["http-backend"], { env });
+    if (before) {
+      child.on("close", async () => {
+        try {
+          const after = await branches(gitDir);
+          const moved = after.filter((b) => before.get(b.name) !== b.sha).map((b) => ({ ref: b.name, sha: b.sha }));
+          await pipelines.afterPush(found.id, moved, user.id);
+        } catch (e) {
+          request.log.error(e, "starting pipelines after a push");
+        }
+      });
+    }
 
     if (request.method === "POST") request.raw.pipe(child.stdin);
     else child.stdin.end();

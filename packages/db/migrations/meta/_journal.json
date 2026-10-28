@@ -43,6 +43,13 @@
       "when": 1793207647434,
       "tag": "0005_mean_the_liberteens",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793208594467,
+      "tag": "0006_lush_midnight",
+      "breakpoints": true
     }
   ]
 }

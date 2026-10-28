@@ -118,6 +118,8 @@ export interface Project {
   // Null while the repo has no commits.
   defaultBranch: string | null;
   runnerContext: string;
+  pipelinesMustSucceed: boolean;
+  autoRunAgentPipelines: boolean;
 }
 
 export interface WorkspaceWithProjects extends Workspace {
@@ -267,6 +269,8 @@ export interface IssueDetail extends IssueSummary {
 export const updateProjectBody = z.object({
   description: z.string().trim().max(500).optional(),
   runnerContext: z.string().max(20_000).optional(),
+  pipelinesMustSucceed: z.boolean().optional(),
+  autoRunAgentPipelines: z.boolean().optional(),
 });
 
 // Runners and jobs
@@ -283,6 +287,8 @@ export interface Runner {
   agents: AgentInfo[];
   concurrent: number | null;
   runningJobs: number;
+  // Takes CI jobs.
+  ci: boolean;
   lastSeenAt: string | null;
   createdAt: string;
 }
@@ -349,6 +355,9 @@ export interface MergeRequestSummary {
 
 export interface MergeRequestDetail extends MergeRequestSummary {
   description: string;
+  // Pipeline for the source branch's current commit, if any.
+  pipeline: PipelineSummary | null;
+  pipelinesMustSucceed: boolean;
   // Null once merged or closed, or when a branch is gone.
   mergeable: boolean | null;
   commits: Commit[];
@@ -424,3 +433,45 @@ export const splitDecisionBody = z.object({
   // true: create the proposed sub-issues; false: do the issue as one job.
   approve: z.boolean(),
 });
+
+// CI pipelines
+
+export type PipelineStatus = "manual" | "pending" | "running" | "success" | "failed" | "canceled";
+export type CiJobStatus = "created" | "pending" | "running" | "success" | "failed" | "canceled" | "skipped";
+
+export const runPipelineBody = z.object({ ref: z.string().min(1) });
+
+export interface CiJob {
+  id: number;
+  pipelineId: number;
+  name: string;
+  stage: string;
+  status: CiJobStatus;
+  allowFailure: boolean;
+  runner: string | null;
+  error: string | null;
+  // Why a pending job hasn't started, e.g. no runner takes CI jobs.
+  waitingReason: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface PipelineSummary {
+  id: number;
+  project: string;
+  ref: string;
+  sha: string;
+  status: PipelineStatus;
+  source: "push" | "merge_request" | "web";
+  triggeredBy: string;
+  mergeRequest: number | null;
+  error: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface PipelineDetail extends PipelineSummary {
+  stages: string[];
+  jobs: CiJob[];
+}

@@ -40,6 +40,34 @@ Claude Code workshops run in Claude's `plan` mode and resume the same session ea
 Codex workshops run in its read-only sandbox with the conversation so far. If no runner can
 take the turn, your message waits in the queue and the workshop says why.
 
+## CI pipelines
+
+Add a `.cohort-ci.yml` to a repo, in the same format as GitLab's `.gitlab-ci.yml` (a subset:
+`stages`, `variables`, and jobs with `stage`, `script`, `variables` and `allow_failure`):
+
+```yaml
+stages: [build, test]
+
+build:
+  stage: build
+  script:
+    - npm ci
+
+test:
+  stage: test
+  script:
+    - npm test
+```
+
+Every push by a person starts a pipeline; merge requests show the pipeline for their latest
+commit. Stages run in order, jobs within a stage run in parallel, and a failure skips the
+later stages. Runners run CI jobs with a shell (`[ci]` in `config.toml`), with GitLab's usual
+variables such as `CI_COMMIT_SHA` and `CI_COMMIT_REF_NAME`.
+
+Pipelines for **agents' merge requests wait for you** to start them, since their jobs run
+commands from the agent's changes on your machine. Project settings can run them
+automatically, and can require a passing pipeline before merging.
+
 ## Agents
 
 Assign an issue to **claude-bot** (Claude Code) or **codex-bot** (OpenAI Codex) and a runner
@@ -79,6 +107,10 @@ limit = 2
 [split]
 max_subtasks = 4                  # bigger splits wait for your approval
 max_depth = 1                     # 0 turns splitting off
+
+[ci]
+enabled = true                    # run CI jobs from .cohort-ci.yml
+timeout_minutes = 60
 
 [context]
 instructions = """Extra instructions for every job on this runner."""
