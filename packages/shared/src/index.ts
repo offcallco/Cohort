@@ -20,7 +20,7 @@ export const createTokenBody = z.object({
 export type CreateTokenBody = z.infer<typeof createTokenBody>;
 
 export * from "./protocol.ts";
-import type { AgentInfo, AgentType } from "./protocol.ts";
+import type { AgentInfo, AgentType, JobKind } from "./protocol.ts";
 
 export interface User {
   id: number;
@@ -251,6 +251,10 @@ export interface IssueComment {
 
 export interface IssueDetail extends IssueSummary {
   body: string;
+  origin: "user" | "workshop" | "split";
+  branch: string | null;
+  // A split over the runner's limit, waiting for approval.
+  splitProposal: { issues: ProposedIssue[]; limit: number } | null;
   author: User;
   parentIssue: IssueRef | null;
   childIssues: IssueRef[];
@@ -294,7 +298,7 @@ export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancele
 export interface Job {
   id: number;
   project: string;
-  kind: "implement" | "workshop";
+  kind: JobKind;
   issue: IssueRef | null;
   workshop: number | null;
   bot: string;
@@ -415,3 +419,8 @@ export interface WorkshopDetail extends WorkshopSummary {
   parentIssue: IssueRef | null;
   createdIssues: IssueRef[];
 }
+
+export const splitDecisionBody = z.object({
+  // true: create the proposed sub-issues; false: do the issue as one job.
+  approve: z.boolean(),
+});

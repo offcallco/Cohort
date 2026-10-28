@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import type { Job } from "@cohort/shared";
 import { api } from "../../api.ts";
-import { JobStatusPill } from "../../components/Pills.tsx";
+import { JOB_KIND_LABELS, JobStatusPill } from "../../components/Pills.tsx";
 import { shortSha, timeAgo } from "../../format.ts";
 import { useProject } from "./ProjectLayout.tsx";
 
@@ -62,7 +62,7 @@ export function JobView() {
             Job #{job.id} <JobStatusPill status={job.status} />
           </h1>
           <div className="muted">
-            {job.bot} ({job.agentType})
+            {JOB_KIND_LABELS[job.kind]} by {job.bot} ({job.agentType})
             {job.issue && (
               <>
                 {" for "}
@@ -71,8 +71,19 @@ export function JobView() {
                 </Link>
               </>
             )}
-            {" · "}
-            <code>{job.branch}</code> from <code>{job.baseBranch}</code>
+            {job.kind === "resolve" ? (
+              <>
+                {" · merging "}
+                <code>{job.baseBranch}</code> into <code>{job.branch}</code>
+              </>
+            ) : (
+              job.branch && (
+                <>
+                  {" · "}
+                  <code>{job.branch}</code> from <code>{job.baseBranch}</code>
+                </>
+              )
+            )}
             {job.runner && <> · on {job.runner}</>}
             {job.startedAt && <> · started {timeAgo(job.startedAt)}</>}
             {job.commitSha && (

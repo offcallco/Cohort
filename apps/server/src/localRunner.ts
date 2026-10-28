@@ -30,6 +30,13 @@ name = "codex"
 type = "codex"
 limit = 2
 
+# Big issues can be split into sub-issues that run in parallel and merge into one branch.
+[split]
+# A split into more sub-issues than this waits for your approval.
+max_subtasks = 4
+# 0 turns splitting off; 1 lets issues split once.
+max_depth = 1
+
 [context]
 # Extra instructions sent with every job on this runner.
 instructions = """

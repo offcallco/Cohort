@@ -48,6 +48,17 @@ picks it up: it checks out a fresh git worktree, runs the agent on the issue, co
 bot comments with a summary. Merging the MR marks the issue done. Watch the live log from the
 issue or the project's Jobs tab, and cancel or retry from there.
 
+Agents respect issue dependencies: an issue waits in the queue until the issues it waits on are
+done. Assigning a parent issue whose sub-issues you (or a workshop) created assigns all of them;
+they run in dependency order, each with its own MR, and the parent is done when they are.
+
+Before implementing, the agent decides whether the issue should be **split**. If it proposes
+two or more sub-issues, they're created and worked on in parallel (within the runner's limits),
+each on a branch cut from the issue's branch and merged back into it when done. A conflict
+between parts gets a job of its own to resolve it. When every part is merged you get **one**
+merge request for the whole issue. A split bigger than `max_subtasks` waits for you to approve
+it (or have it done as one job). Label an issue `no-split` to skip splitting.
+
 `pnpm cohort start` also starts a runner on this machine, configured in
 `~/.cohort/runner/config.toml`:
 
@@ -64,6 +75,10 @@ permission_mode = "acceptEdits"   # edit files only; "bypassPermissions" lets it
 name = "codex"
 type = "codex"                    # needs the `codex` CLI
 limit = 2
+
+[split]
+max_subtasks = 4                  # bigger splits wait for your approval
+max_depth = 1                     # 0 turns splitting off
 
 [context]
 instructions = """Extra instructions for every job on this runner."""

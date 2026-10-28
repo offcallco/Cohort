@@ -215,6 +215,7 @@ export class RunnerHub implements Dispatcher {
   private async runDispatch() {
     const queued = this.db.select().from(jobs).where(eq(jobs.status, "queued")).orderBy(asc(jobs.id)).all();
     for (const job of queued) {
+      if (this.jobs.blockedReason(job)) continue;
       const conn = this.pickRunner(job.agentType, this.jobs.preferredRunner(job));
       if (!conn) continue;
       const token = JOB_TOKEN_PREFIX + randomToken();

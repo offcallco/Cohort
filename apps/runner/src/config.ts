@@ -29,6 +29,14 @@ const runnerConfig = z.object({
   data_dir: z.string().optional(),
   agents: z.array(agentConfig).default([]),
   context: z.object({ instructions: z.string().default("") }).default({ instructions: "" }),
+  split: z
+    .object({
+      // A split into more sub-issues than this waits for the user's approval.
+      max_subtasks: z.number().int().positive().default(4),
+      // 0 turns splitting off; 1 lets issues split once (sub-issues never split again).
+      max_depth: z.number().int().min(0).max(1).default(1),
+    })
+    .default({ max_subtasks: 4, max_depth: 1 }),
 });
 
 export type RunnerConfig = z.infer<typeof runnerConfig> & { dataDir: string };

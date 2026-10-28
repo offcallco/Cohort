@@ -1,6 +1,5 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import {
-  issueComments,
   issueLabels,
   issues,
   labels,
@@ -13,10 +12,9 @@ import {
   type Db,
 } from "@cohort/db";
 import type { Job, JobSpec, WorkshopTurn } from "@cohort/shared";
-import { botEmail, findBot } from "../bots.ts";
+import { botEmail } from "../bots.ts";
 import { branchSha, defaultBranch, repoDir } from "../git/repo.ts";
-import { slugify } from "../slug.ts";
-import { createMergeRequest } from "../mrs/service.ts";
+import { IssueFlow } from "./issueFlow.ts";
 import type { JobLogs } from "./logs.ts";
 
 type JobRow = typeof jobs.$inferSelect;
@@ -38,6 +36,7 @@ export interface JobResult {
   error?: string;
   commitSha?: string;
   sessionId?: string;
+  maxSubtasks?: number;
 }
 
 // Implemented by the workshop service, which owns what workshop jobs mean.
@@ -51,14 +50,18 @@ export interface WorkshopHooks {
 export class Jobs {
   dispatcher: Dispatcher | null = null;
   workshops: WorkshopHooks | null = null;
+  // Issue jobs: splitting, sub-issues, dependencies and merge requests.
+  readonly flow: IssueFlow;
 
   constructor(
     readonly db: Db,
     readonly reposRoot: string,
     readonly logs: JobLogs,
-  ) {}
+  ) {
+    this.flow = new IssueFlow(this);
+  }
 
-  private projectPath(projectId: number) {
+  projectPath(projectId: number) {
     const row = this.db
       .select({ workspace: workspaces.slug, project: projects.slug, context: projects.runnerContext })
       .from(projects)
@@ -90,63 +93,14 @@ export class Jobs {
   }
 
   // Starts or cancels agent work after an issue's assignee changed.
-  async assigneeChanged(issue: IssueRow, previousAssigneeId: number | null) {
-    if (issue.assigneeId === previousAssigneeId) return;
-    if (previousAssigneeId !== null && findBot(this.db, previousAssigneeId)) {
-      const active = this.activeForIssue(issue.id);
-      if (active && active.botId === previousAssigneeId) this.cancel(active);
-    }
-    if (issue.assigneeId !== null && findBot(this.db, issue.assigneeId)) {
-      await this.enqueueForIssue(issue, issue.assigneeId);
-    }
-  }
-
-  // Queues an implement job for `issue` on `botId`'s agent, unless one is already active.
-  async enqueueForIssue(issue: IssueRow, botId: number): Promise<JobRow> {
-    const active = this.activeForIssue(issue.id);
-    if (active) return active;
-    const bot = findBot(this.db, botId);
-    if (!bot?.agentType) throw new JobError("That user isn't an agent");
-
-    const { workspace, project } = this.projectPath(issue.projectId);
-    const base = await defaultBranch(repoDir(this.reposRoot, workspace, project));
-    if (!base) throw new JobError("Push at least one commit before assigning an agent");
-
-    // Retries keep working on the branch earlier jobs for this issue used.
-    const previous = this.db
-      .select({ branch: jobs.branch })
-      .from(jobs)
-      .where(eq(jobs.issueId, issue.id))
-      .orderBy(desc(jobs.id))
-      .get();
-    const branch = previous?.branch ?? `cohort/${issue.number}-${slugify(issue.title).slice(0, 40) || "issue"}`;
-
-    const row = this.db
-      .insert(jobs)
-      .values({
-        projectId: issue.projectId,
-        issueId: issue.id,
-        kind: "implement",
-        botId: bot.id,
-        agentType: bot.agentType,
-        branch,
-        baseBranch: base,
-      })
-      .returning()
-      .get();
-    this.logs.append(row.id, `Queued for ${bot.username}\n`);
-    this.dispatcher?.dispatch();
-    return row;
+  assigneeChanged(issue: IssueRow, previousAssigneeId: number | null) {
+    return this.flow.assigneeChanged(issue, previousAssigneeId);
   }
 
   async retry(job: JobRow): Promise<JobRow> {
     if (job.status === "queued" || job.status === "running") throw new JobError("This job is still active");
     if (job.kind === "workshop") return this.workshops!.retry(job);
-    const issue = job.issueId ? this.db.select().from(issues).where(eq(issues.id, job.issueId)).get() : undefined;
-    if (!issue) throw new JobError("The issue for this job no longer exists");
-    const next = await this.enqueueForIssue(issue, job.botId);
-    this.setIssueStatus(issue.id, "in_progress");
-    return next;
+    return this.flow.retry(job);
   }
 
   cancel(job: JobRow) {
@@ -189,6 +143,7 @@ export class Jobs {
       context,
       bot: { name: bot.username, email: botEmail(bot.username) },
       workshop: job.kind === "workshop" ? this.workshops!.spec(job) : undefined,
+      resolve: job.kind === "resolve" ? { source: job.baseBranch, target: job.branch } : undefined,
     };
   }
 
@@ -196,8 +151,13 @@ export class Jobs {
     return job.kind === "workshop" ? (this.workshops?.preferredRunner(job) ?? null) : null;
   }
 
+  // Why a queued job can't start yet regardless of runners, e.g. unfinished dependencies.
+  blockedReason(job: JobRow) {
+    return this.flow.blockedReason(job);
+  }
+
   async branchExists(job: JobRow) {
-    if (!job.branch) return false;
+    if (!job.branch || job.kind !== "implement") return false;
     const { workspace, project } = this.projectPath(job.projectId);
     return (await branchSha(repoDir(this.reposRoot, workspace, project), job.branch)) !== null;
   }
@@ -213,7 +173,7 @@ export class Jobs {
     const job = this.get(jobId)!;
     const runner = this.db.select({ name: runners.name }).from(runners).where(eq(runners.id, runnerId)).get();
     this.logs.append(jobId, `Assigned to runner ${runner?.name ?? runnerId}\n`);
-    if (job.issueId && job.kind === "implement") this.setIssueStatus(job.issueId, "in_progress");
+    if (job.issueId && job.kind !== "workshop") this.setIssueStatus(job.issueId, "in_progress");
     this.emitStatus(job);
   }
 
@@ -256,52 +216,17 @@ export class Jobs {
       return;
     }
 
-    const issue = job.issueId ? this.db.select().from(issues).where(eq(issues.id, job.issueId)).get() : undefined;
-    if (issue && result.status === "succeeded") {
-      const mr = await this.openMergeRequest(job, issue, result.summary ?? "");
-      this.db.update(jobs).set({ mergeRequestId: mr.id }).where(eq(jobs.id, jobId)).run();
-      this.setIssueStatus(issue.id, "review");
-      this.comment(issue.id, job.botId, `Opened !${mr.number} from \`${job.branch}\`.${result.summary ? `\n\n${result.summary}` : ""}`);
-    } else if (issue && result.status === "failed") {
-      this.setIssueStatus(issue.id, "blocked");
-      this.comment(issue.id, job.botId, `Job #${job.id} failed: ${result.error ?? "unknown error"}`);
-    } else if (issue && result.status === "canceled") {
-      this.setIssueStatus(issue.id, "todo");
+    try {
+      await this.flow.finished(job, result);
+    } catch (e) {
+      this.logs.append(jobId, `Couldn't finish up after the job: ${e instanceof Error ? e.message : e}\n`);
     }
     this.emitStatus(this.get(jobId)!);
     this.dispatcher?.dispatch();
   }
 
-  private async openMergeRequest(job: JobRow, issue: IssueRow, summary: string) {
-    const existing = this.db
-      .select()
-      .from(mergeRequests)
-      .where(
-        and(
-          eq(mergeRequests.projectId, job.projectId),
-          eq(mergeRequests.sourceBranch, job.branch),
-          eq(mergeRequests.status, "open"),
-        ),
-      )
-      .get();
-    if (existing) return existing;
-    return createMergeRequest(this.db, {
-      projectId: job.projectId,
-      authorId: job.botId,
-      title: `Resolve "${issue.title}"`,
-      description: `Closes #${issue.number}${summary ? `\n\n${summary}` : ""}`,
-      sourceBranch: job.branch,
-      targetBranch: job.baseBranch,
-      issueId: issue.id,
-    });
-  }
-
   private setIssueStatus(issueId: number, status: IssueRow["status"]) {
     this.db.update(issues).set({ status, updatedAt: new Date() }).where(eq(issues.id, issueId)).run();
-  }
-
-  private comment(issueId: number, authorId: number, body: string) {
-    this.db.insert(issueComments).values({ issueId, authorId, body }).run();
   }
 
   private emitStatus(job: JobRow) {
@@ -336,7 +261,8 @@ export class Jobs {
       error: job.error,
       commitSha: job.commitSha,
       mergeRequest: mr?.number ?? null,
-      waitingReason: job.status === "queued" ? (this.dispatcher?.waitingReason(job.agentType) ?? null) : null,
+      waitingReason:
+        job.status === "queued" ? (this.blockedReason(job) ?? this.dispatcher?.waitingReason(job.agentType) ?? null) : null,
       createdAt: job.createdAt.toISOString(),
       startedAt: job.startedAt?.toISOString() ?? null,
       finishedAt: job.finishedAt?.toISOString() ?? null,

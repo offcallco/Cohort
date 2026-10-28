@@ -19,9 +19,11 @@ export interface WorkshopTurn {
   plan: string;
 }
 
+export type JobKind = "implement" | "workshop" | "split" | "resolve";
+
 export interface JobSpec {
   id: number;
-  kind: "implement" | "workshop";
+  kind: JobKind;
   agent: AgentType;
   // "<workspace>/<project>"
   project: string;
@@ -39,6 +41,10 @@ export interface JobSpec {
   // Identity for commits the runner makes.
   bot: { name: string; email: string };
   workshop?: WorkshopTurn;
+  // Resolve jobs: merge `source` into `target` (the job's branch) and fix the conflicts.
+  resolve?: { source: string; target: string };
+  // Split jobs on sub-issues never split again.
+  noSplit?: boolean;
 }
 
 const agentInfo = z.object({
@@ -68,6 +74,8 @@ export const runnerMessage = z.discriminatedUnion("type", [
     commitSha: z.string().optional(),
     // Workshop turns: the agent session, so the next turn can resume it.
     sessionId: z.string().optional(),
+    // Split jobs: the runner's max_subtasks, above which a split needs approval.
+    maxSubtasks: z.number().int().optional(),
   }),
   // The runner couldn't take an assigned job (no capacity, unknown agent); requeue it.
   z.object({ type: z.literal("rejected"), jobId: z.number().int(), reason: z.string() }),

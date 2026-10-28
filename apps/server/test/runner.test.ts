@@ -78,6 +78,7 @@ async function startRunner(agent: AgentConfig, concurrent = 2) {
     concurrent,
     agents: [agent],
     context: { instructions: "Be brief." },
+    split: { max_subtasks: 4, max_depth: 1 },
     dataDir: join(tmp, `runner-${agent.name}`),
   };
   client = new RunnerClient(config, [createAdapter(agent)], { info: () => {}, error: () => {} });

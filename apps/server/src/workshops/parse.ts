@@ -70,3 +70,16 @@ export function orderIssues(list: ProposedIssue[]): ProposedIssue[] {
   for (const issue of list) visit(issue);
   return ordered;
 }
+
+// Reads a split job's reply: the <issues> list, where an empty list (or none) means "don't
+// split". Returns null when the list is missing or unreadable.
+export function parseSubtasks(text: string): ProposedIssue[] | null {
+  const raw = section(text, "issues");
+  if (raw === null) return null;
+  try {
+    const parsed = z.array(proposedIssue).max(50).safeParse(JSON.parse(unfence(raw)));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}

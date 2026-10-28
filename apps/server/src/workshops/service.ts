@@ -221,7 +221,7 @@ export class Workshops implements WorkshopHooks {
         parent: parent?.number ?? null,
         dependsOn: issue.dependsOn.map((key) => numbers.get(key)!),
         assignee: null,
-      });
+      }, "workshop");
       numbers.set(issue.key, row.number);
     }
     // The plan's issue isn't done until its parts are.

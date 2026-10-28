@@ -5,6 +5,7 @@ import {
   ISSUE_STATUSES,
   createCommentBody,
   createIssueBody,
+  splitDecisionBody,
   updateIssueBody,
   type IssueStatus,
 } from "@cohort/shared";
@@ -144,6 +145,22 @@ export async function issueRoutes(app: FastifyInstance, { db, jobs }: { db: Db; 
     const updated = guarded(reply, () => updateIssue(db, row, body));
     if (!updated) return;
     await jobs.assigneeChanged(updated, row.assigneeId);
+    if (updated.status === "done" && row.status !== "done") await jobs.flow.issueDone(updated);
+    return { issue: issueDetail(db, findIssue(db, row.projectId, row.number)!) };
+  });
+
+  // Approve (or decline) a split that was over the runner's limit.
+  app.post<{ Params: IssueParams }>(`${base}/issues/:number/split`, async (request, reply) => {
+    const row = issue(request.params, reply);
+    if (!row) return;
+    const body = parseBody(splitDecisionBody, request.body, reply);
+    if (!body) return;
+    try {
+      await jobs.flow.decideSplit(row, body.approve);
+    } catch (e) {
+      if (e instanceof JobError) return reply.code(400).send({ error: e.message });
+      throw e;
+    }
     return { issue: issueDetail(db, findIssue(db, row.projectId, row.number)!) };
   });
 

@@ -86,3 +86,62 @@ export function workshopPrompt(job: JobSpec, runnerInstructions: string, fresh: 
   }
   return parts.join("\n\n");
 }
+
+function issueText(job: JobSpec) {
+  const issue = job.issue!;
+  const parts = [`Issue #${issue.number} in ${job.project}: ${issue.title}`];
+  if (issue.labels.length) parts.push(`Labels: ${issue.labels.join(", ")}`);
+  parts.push(issue.body.trim() ? `Issue description:\n\n${issue.body.trim()}` : "The issue has no description.");
+  return parts.join("\n\n");
+}
+
+function contexts(job: JobSpec, runnerInstructions: string) {
+  const parts: string[] = [];
+  if (job.context.trim()) parts.push(`Project instructions:\n\n${job.context.trim()}`);
+  if (runnerInstructions.trim()) parts.push(`Runner instructions:\n\n${runnerInstructions.trim()}`);
+  return parts;
+}
+
+// Asks the agent whether to split an issue into sub-issues other agents can do in parallel.
+export function splitPrompt(job: JobSpec, runnerInstructions: string, maxSubtasks: number) {
+  return [
+    `You're planning how coding agents should carry out this issue. Split this issue only if it's worth it.`,
+    issueText(job),
+    ...contexts(job, runnerInstructions),
+    `The current directory is a read-only checkout of ${job.baseBranch}. Read the code as needed; don't change any files.`,
+    [
+      "Decide whether to split the issue into sub-issues. Each sub-issue goes to its own agent, works on its",
+      "own branch, and is merged into a shared branch for the issue; the reviewer sees one merge request.",
+      "",
+      "- Most issues should NOT be split. Split only when the work is too big for one focused change AND has",
+      "  parts that are genuinely separate (different files, modules or layers).",
+      `- Use at most ${maxSubtasks} sub-issues. More needs the user's approval, so only go over if you must.`,
+      "- Sub-issues that touch the same files should depend on each other instead of running in parallel,",
+      "  to avoid merge conflicts.",
+      "- Each sub-issue's body says exactly what to build and where, so an agent can do it without the others.",
+    ].join("\n"),
+    [
+      "Reply with only this:",
+      "",
+      "<issues>",
+      `[] to do the issue as one job, or a JSON array of sub-issues:`,
+      `[{"key": "short-id", "title": "...", "body": "markdown: what to build, where, how to tell it's done", "labels": ["..."], "dependsOn": ["keys of sub-issues that must be merged first"]}]`,
+      "</issues>",
+    ].join("\n"),
+  ].join("\n\n");
+}
+
+// Asks the agent to resolve conflicts from merging a sub-issue into its parent's branch.
+export function resolvePrompt(job: JobSpec, files: string[], runnerInstructions: string) {
+  const { source, target } = job.resolve!;
+  return [
+    `Merging the branch ${source}${job.issue ? ` (issue #${job.issue.number}: ${job.issue.title})` : ""} into ${target} left merge conflicts in:`,
+    files.map((f) => `- ${f}`).join("\n"),
+    ...contexts(job, runnerInstructions),
+    [
+      "Resolve every conflict in those files so the result keeps what both sides intended. Remove all conflict",
+      "markers (<<<<<<<, =======, >>>>>>>). Don't run git commands; the merge is committed for you.",
+      "When you're done, reply with a short summary of how you resolved each conflict.",
+    ].join("\n"),
+  ].join("\n\n");
+}

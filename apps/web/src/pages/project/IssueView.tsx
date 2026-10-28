@@ -64,6 +64,13 @@ export function IssueView() {
         <StatusBadge status={i.status} /> Opened {timeAgo(i.createdAt)} by {i.author.username}
       </div>
       {error && <p className="error">{error}</p>}
+      {i.origin === "split" && i.parentIssue && (
+        <p className="muted small">
+          Split off from <IssueLink base={base} issue={i.parentIssue} /> by an agent. When it's done it's merged into the parent's
+          branch, and the parent gets one merge request for all its parts.
+        </p>
+      )}
+      {i.splitProposal && <SplitApproval issue={i} url={url} onDone={refresh} />}
       <AgentPanel key={`${i.number}-${i.assignee?.username ?? ""}`} issueNumber={i.number} onChange={refresh} />
 
       <div className="issue-layout">
@@ -146,12 +153,22 @@ export function IssueView() {
               onAdd={(text) => save({ dependsOn: [...i.dependsOn.map((d) => d.number), ...parseNumbers(text)] })}
             />
           </Field>
+          {i.branch && (
+            <Field title="Branch">
+              <code className="small">{i.branch}</code>
+            </Field>
+          )}
           {i.blocks.length > 0 && (
             <Field title="Blocks">
               <RefList base={base} refs={i.blocks} />
             </Field>
           )}
           <Field title="Sub-issues">
+            {i.childIssues.length > 0 && (
+              <div className="muted small">
+                {i.childIssues.filter((c) => c.status === "done").length} of {i.childIssues.length} done
+              </div>
+            )}
             <RefList base={base} refs={i.childIssues} />
             <Link className="small" to={`${base}/issues/new?parent=${i.number}`}>
               + Add sub-issue
@@ -160,6 +177,52 @@ export function IssueView() {
         </aside>
       </div>
     </>
+  );
+}
+
+// A split over the runner's limit: create the sub-issues anyway, or do the issue as one job.
+function SplitApproval({ issue, url, onDone }: { issue: IssueDetail; url: string; onDone: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const proposal = issue.splitProposal!;
+  const titleOf = (key: string) => proposal.issues.find((p) => p.key === key)?.title ?? key;
+
+  async function decide(approve: boolean) {
+    setBusy(true);
+    try {
+      await api(`${url}/split`, { method: "POST", body: { approve } });
+      setError(null);
+      await onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel notice stack">
+      <strong>
+        The agent wants to split this into {proposal.issues.length} sub-issues, over the runner's limit of {proposal.limit}.
+      </strong>
+      <ol className="split-list">
+        {proposal.issues.map((p) => (
+          <li key={p.key}>
+            {p.title}
+            {p.dependsOn.length > 0 && <span className="muted small"> · after {p.dependsOn.map(titleOf).join(", ")}</span>}
+          </li>
+        ))}
+      </ol>
+      {error && <p className="error">{error}</p>}
+      <div className="row wrap">
+        <button disabled={busy} onClick={() => decide(true)}>
+          Split into {proposal.issues.length}
+        </button>
+        <button className="secondary" disabled={busy} onClick={() => decide(false)}>
+          Do it as one job
+        </button>
+      </div>
+    </section>
   );
 }
 

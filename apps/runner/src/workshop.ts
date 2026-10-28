@@ -1,12 +1,12 @@
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { JobSpec } from "@cohort/shared";
+import { checkout } from "./checkout.ts";
 import { git } from "./git.ts";
 import type { JobContext, JobOutcome } from "./job.ts";
 import { workshopPrompt } from "./prompt.ts";
 
 const workshopDir = (dataDir: string, id: number) => join(dataDir, "workshops", `w-${id}`);
-const cacheDir = (dataDir: string, project: string) => join(dataDir, "cache", `${project}.git`);
 
 // Runs one workshop turn in a read-only checkout that's kept for the whole workshop, so the
 // agent can resume its session from the same folder.
@@ -14,24 +14,11 @@ export async function runWorkshopTurn(job: JobSpec, ctx: JobContext): Promise<Jo
   const { log, signal, adapter } = ctx;
   const turn = job.workshop!;
   const dir = workshopDir(ctx.dataDir, turn.id);
-  const cache = cacheDir(ctx.dataDir, job.project);
-  const url = `${ctx.serverUrl}${job.clonePath}`;
-  const auth = ["-c", "credential.helper=", "-c", `http.extraHeader=Authorization: Bearer ${job.token}`];
 
   try {
     if (!existsSync(dir)) {
       log(`Checking out ${job.baseBranch} for the workshop\n`);
-      await ctx.locks.run(cache, async () => {
-        if (!existsSync(cache)) {
-          mkdirSync(cache, { recursive: true });
-          await git(["init", "--bare", "--quiet", cache]);
-        }
-        await git(["--git-dir", cache, ...auth, "fetch", "--prune", "--quiet", url, "+refs/heads/*:refs/remotes/origin/*"], {
-          secrets: [job.token],
-        });
-        await git(["--git-dir", cache, "worktree", "prune"]);
-        await git(["--git-dir", cache, "worktree", "add", "--quiet", "--detach", "--force", dir, `refs/remotes/origin/${job.baseBranch}`]);
-      });
+      await checkout(job, { ...ctx, dir, startPoint: job.baseBranch });
     }
     if (signal.aborted) return { status: "canceled" };
 
@@ -67,7 +54,6 @@ export async function removeWorkshop(dataDir: string, workshopId: number, locks:
   // The checkout's .git file points at the cache it belongs to.
   let cache: string | null = null;
   try {
-    const { readFileSync } = await import("node:fs");
     const pointer = readFileSync(gitFile, "utf8").match(/^gitdir: (.*)\/worktrees\/[^/]+\s*$/m);
     cache = pointer?.[1] ?? null;
   } catch {
