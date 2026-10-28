@@ -71,9 +71,9 @@ export async function mergeRequestRoutes(
     return [r.w, r.p];
   }
 
-  const detail = async (row: NonNullable<ReturnType<typeof findMergeRequest>>) => ({
+  const detail = async (row: NonNullable<ReturnType<typeof findMergeRequest>>, options: { ignoreWhitespace?: boolean } = {}) => ({
     mergeRequest: {
-      ...(await mergeRequestDetail(db, reposRoot, row)),
+      ...(await mergeRequestDetail(db, reposRoot, row, options)),
       jobs: jobs.list({ mergeRequestId: row.id }),
       pipeline: await pipelineFor(row),
       pipelinesMustSucceed: db.select().from(projects).where(eq(projects.id, row.projectId)).get()!.pipelinesMustSucceed,
@@ -108,10 +108,11 @@ export async function mergeRequestRoutes(
     return reply.code(201).send(await detail(row));
   });
 
-  app.get<{ Params: MrParams }>(`${base}/:number`, async (request, reply) => {
+  // ?whitespace=hide leaves out changes that are only whitespace.
+  app.get<{ Params: MrParams; Querystring: { whitespace?: string } }>(`${base}/:number`, async (request, reply) => {
     const row = mr(request.params, reply);
     if (!row) return;
-    return detail(row);
+    return detail(row, { ignoreWhitespace: request.query.whitespace === "hide" });
   });
 
   app.post<{ Params: MrParams }>(`${base}/:number/merge`, async (request, reply) => {
@@ -161,7 +162,10 @@ export async function mergeRequestRoutes(
     if (!row) return;
     const body = parseBody(createCommentBody, request.body, reply);
     if (!body) return;
-    addMergeRequestComment(db, row, request.user!.id, body.body);
+    if ((body.path === undefined) !== (body.line === undefined)) {
+      return reply.code(400).send({ error: "A line comment needs both a file and a line" });
+    }
+    addMergeRequestComment(db, row, request.user!.id, body.body, { path: body.path, line: body.line, side: body.side ?? "new" });
     return reply.code(201).send(await detail(findMergeRequest(db, row.projectId, row.number)!));
   });
 }

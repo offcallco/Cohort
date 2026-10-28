@@ -1,258 +1,264 @@
 import { useState, type FormEvent } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { Link, useParams } from "react-router";
+import { GitBranch, HelpCircle } from "lucide-react";
 import type { MergeRequestDetail } from "@cohort/shared";
 import { api } from "../../api.ts";
+import { Actor } from "../../components/Agent.tsx";
+import { ChecksPanel } from "../../components/ChecksPanel.tsx";
+import { DiffViewer, type LineTarget } from "../../components/DiffViewer.tsx";
 import { Markdown } from "../../components/Markdown.tsx";
 import { MarkdownEditor } from "../../components/MarkdownEditor.tsx";
-import { JobStatusPill, MergeRequestPill } from "../../components/Pills.tsx";
-import { shortSha, timeAgo } from "../../format.ts";
+import { MergeRequestPill } from "../../components/Pills.tsx";
+import { SkeletonRows } from "../../components/Skeleton.tsx";
+import { plural, shortSha, timeAgo } from "../../format.ts";
 import { useApi } from "../../hooks.ts";
-import { FileDiffView } from "./CommitView.tsx";
-import { PipelineLink } from "../../components/PipelineBits.tsx";
 import { useProject } from "./ProjectLayout.tsx";
 
+// Sentences where the agent says it isn't sure, so they can't hide in the summary.
+function uncertainties(text: string) {
+  return text
+    .split(/\n+|(?<=[.!?])\s+/)
+    .map((s) => s.replace(/[*_#>-]+/g, " ").trim())
+    .filter((s) => /\b(unsure|not sure|wasn't sure|uncertain|please check|couldn't (run|verify|test))\b/i.test(s));
+}
+
+// The review page: agent summary first, then the diff with checks beside it, then the gate.
 export function MergeRequestView() {
   const { project, base } = useProject();
   const { number = "" } = useParams();
-  const [search, setSearch] = useSearchParams();
-  const tab = search.get("tab") ?? "overview";
+  const [hideWhitespace, setHideWhitespace] = useState(false);
   const url = `/api/projects/${project.workspace}/${project.slug}/merge_requests/${number}`;
-  const { data, error: loadError } = useApi<{ mergeRequest: MergeRequestDetail }>(url);
-  const [mr, setMr] = useState<MergeRequestDetail | null>(null);
+  const { data, error: loadError, reload } = useApi<{ mergeRequest: MergeRequestDetail }>(`${url}${hideWhitespace ? "?whitespace=hide" : ""}`, {
+    pollMs: 4000,
+    poll: (d) => d.mergeRequest.status === "open",
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [deleteSource, setDeleteSource] = useState(true);
-
-  const current = mr && String(mr.number) === number ? mr : (data?.mergeRequest ?? null);
-
-  async function runPipeline(id: number) {
-    try {
-      await api(`/api/projects/${project.workspace}/${project.slug}/pipelines/${id}/run`, { method: "POST" });
-      const res = await api<{ mergeRequest: MergeRequestDetail }>(url);
-      setMr(res.mergeRequest);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't start the pipeline");
-    }
-  }
+  const [confirmClose, setConfirmClose] = useState(false);
 
   async function act(path: string, body?: object) {
     setBusy(true);
     try {
-      const res = await api<{ mergeRequest: MergeRequestDetail }>(`${url}/${path}`, { method: "POST", body: body ?? {} });
-      setMr(res.mergeRequest);
+      await api(path.startsWith("/") ? path : `${url}/${path}`, { method: "POST", body: body ?? {} });
       setError(null);
+      await reload();
+      return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed");
+      setError(e instanceof Error ? e.message : "That didn't work");
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
-  if (loadError) return <p className="error">{loadError}</p>;
-  if (!current) return null;
-  const m = current;
-  const pipelineBlocks = m.status === "open" && m.pipelinesMustSucceed && m.pipeline?.status !== "success";
+  if (loadError) {
+    return (
+      <div className="panel">
+        <p className="error">Couldn't load !{number}: {loadError}</p>
+        <button className="secondary" onClick={reload}>
+          Try again
+        </button>
+      </div>
+    );
+  }
+  if (!data) return <SkeletonRows rows={5} height={56} />;
+  const m = data.mergeRequest;
   const additions = m.files.reduce((n, f) => n + f.additions, 0);
   const deletions = m.files.reduce((n, f) => n + f.deletions, 0);
+  const unsure = uncertainties(m.description);
+  const lineComments = m.comments.filter((c) => c.path);
+  const discussion = m.comments.filter((c) => !c.path);
+  const issueBase = m.issue ? `${base}/issues/${m.issue.number}` : null;
+
+  const blocked =
+    m.status !== "open"
+      ? null
+      : m.mergeable === false
+        ? `The branches conflict. Resolve them on ${m.sourceBranch} and push again.`
+        : m.mergeable === null
+          ? "One of the branches is missing."
+          : m.commits.length === 0
+            ? "There's nothing to merge."
+            : m.pipelinesMustSucceed && m.pipeline?.status !== "success"
+              ? m.pipeline?.status === "manual"
+                ? "This project needs a passing pipeline. Start it first."
+                : `This project needs a passing pipeline (it's ${m.pipeline ? m.pipeline.status : "missing"}).`
+              : null;
 
   return (
     <>
-      <div className="crumbs">
-        <Link to={`${base}/merge_requests`}>Merge requests</Link> / !{m.number}
-      </div>
-      <h1>
-        {m.title} <span className="muted">!{m.number}</span>
-      </h1>
-      <div className="muted issue-byline">
-        <MergeRequestPill status={m.status} />
-        <span>
-          {m.author.username} wants to merge <code>{m.sourceBranch}</code> into <code>{m.targetBranch}</code> · opened{" "}
-          {timeAgo(m.createdAt)}
-          {m.issue && (
-            <>
-              {" · resolves "}
-              <Link to={`${base}/issues/${m.issue.number}`}>
-                #{m.issue.number} {m.issue.title}
-              </Link>
-            </>
+      <header className="work-header">
+        <h1>
+          {m.title} <span className="muted">!{m.number}</span>
+        </h1>
+        <div className="meta">
+          <MergeRequestPill status={m.status} />
+          <Actor name={m.author.username} bot={m.author.kind === "bot"} />
+          <span className="mono">
+            <GitBranch size={12} aria-hidden /> {m.sourceBranch} → {m.targetBranch}
+          </span>
+          <span>
+            {plural(m.files.length, "file")} · <span className="add">+{additions}</span> <span className="del">−{deletions}</span>
+          </span>
+          <span>opened {timeAgo(m.createdAt)}</span>
+          {m.issue && issueBase && (
+            <span>
+              for <Link to={issueBase}>#{m.issue.number} {m.issue.title}</Link>
+            </span>
           )}
-        </span>
-      </div>
+        </div>
+      </header>
 
-      <nav className="tabs">
-        {[
-          ["overview", "Overview"],
-          ["commits", `Commits (${m.commits.length})`],
-          ["changes", `Changes (${m.files.length})`],
-        ].map(([key, label]) => (
-          <button key={key} className={`tab${tab === key ? " active" : ""}`} onClick={() => setSearch(key === "overview" ? {} : { tab: key! })}>
-            {label}
-          </button>
-        ))}
-      </nav>
-      {error && <p className="error">{error}</p>}
-
-      {tab === "overview" && (
-        <>
-          <section className="panel">
-            {m.description.trim() ? <Markdown source={m.description} /> : <p className="muted">No description.</p>}
-          </section>
-
-          {m.jobs.length > 0 && (
-            <section className="panel">
-              <div className="panel-title">Agent jobs</div>
-              <ul className="list">
-                {m.jobs.map((j) => (
-                  <li key={j.id} className="row wrap">
-                    <Link to={`${base}/jobs/${j.id}`}>Job #{j.id}</Link>
-                    <JobStatusPill status={j.status} />
-                    <span className="muted small">
-                      {j.bot} · {timeAgo(j.createdAt)}
-                    </span>
-                  </li>
+      <section className="section">
+        <h2>{m.author.kind === "bot" ? "What the agent says it did" : "Description"}</h2>
+        {unsure.length > 0 && (
+          <div className="unsure">
+            <HelpCircle size={16} aria-hidden />
+            <div>
+              <strong>The agent is unsure about:</strong>
+              <ul>
+                {unsure.map((u, n) => (
+                  <li key={n}>{u}</li>
                 ))}
               </ul>
-            </section>
-          )}
+              {issueBase && m.status === "open" && (
+                <Link className="small" to={`${issueBase}#gate`}>
+                  Answer it with Request changes on the issue
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+        <div className="prose-block">{m.description.trim() ? <Markdown source={m.description} /> : <p className="muted">No description.</p>}</div>
+      </section>
 
-          {m.pipeline && (
-            <section className="panel row spread">
-              <PipelineLink base={base} pipeline={m.pipeline} />
-              {m.pipeline.status === "manual" && (
-                <button className="small" disabled={busy} onClick={() => runPipeline(m.pipeline!.id)}>
-                  Run pipeline
+      <section className={`gate gate-${m.status === "open" ? (blocked ? "idle" : "waiting") : m.status === "merged" ? "passed" : "idle"}`} id="gate">
+        {m.status === "merged" ? (
+          <div className="gate-headline">
+            Merged {m.mergedAt && timeAgo(m.mergedAt)}
+            {m.mergeSha && (
+              <>
+                {" as "}
+                <Link className="sha" to={`${base}/commit/${m.mergeSha}`}>
+                  {shortSha(m.mergeSha)}
+                </Link>
+              </>
+            )}
+            .
+          </div>
+        ) : m.status === "closed" ? (
+          <div className="row spread">
+            <div className="gate-headline">Closed without merging.</div>
+            <button className="secondary" disabled={busy} onClick={() => act("reopen")}>
+              Reopen
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="gate-headline">{blocked ? "Not ready to merge." : `Ready to merge into ${m.targetBranch}.`}</div>
+            <div className="row wrap">
+              <button disabled={busy || blocked !== null} onClick={() => act("merge", { deleteSourceBranch: deleteSource })}>
+                Approve & merge
+              </button>
+              <label className="checkbox small">
+                <input type="checkbox" checked={deleteSource} onChange={(e) => setDeleteSource(e.target.checked)} />
+                Delete {m.sourceBranch} after merging
+              </label>
+              <div className="spacer" />
+              {issueBase && m.author.kind === "bot" && (
+                <Link className="button secondary" to={`${issueBase}#gate`}>
+                  Request changes
+                </Link>
+              )}
+              {confirmClose ? (
+                <>
+                  <span className="muted small">Close without merging? The branch stays.</span>
+                  <button className="danger" disabled={busy} onClick={() => act("close").then(() => setConfirmClose(false))}>
+                    Close it
+                  </button>
+                  <button className="link" onClick={() => setConfirmClose(false)}>
+                    Keep open
+                  </button>
+                </>
+              ) : (
+                <button className="danger" onClick={() => setConfirmClose(true)}>
+                  Close
                 </button>
               )}
-            </section>
-          )}
+            </div>
+            {blocked && <p className="muted small gate-reason">Can't merge yet: {blocked}</p>}
+          </>
+        )}
+        {error && <p className="error small">{error}</p>}
+      </section>
 
-          <section className={`panel merge-box merge-${m.status}`}>
-            {m.status === "merged" && (
-              <p>
-                Merged {m.mergedAt && timeAgo(m.mergedAt)}
-                {m.mergeSha && (
-                  <>
-                    {" as "}
-                    <Link className="sha" to={`${base}/commit/${m.mergeSha}`}>
-                      {shortSha(m.mergeSha)}
-                    </Link>
-                  </>
-                )}
-                .
-              </p>
+      <div className="review-layout">
+        <section className="section review-diff" aria-label="Changes">
+          <div className="row spread">
+            <h2>Changes</h2>
+            {m.commits.length > 0 && (
+              <details className="commits-inline">
+                <summary className="small">{plural(m.commits.length, "commit")}</summary>
+                <ul className="check-list">
+                  {m.commits.map((c) => (
+                    <li key={c.sha}>
+                      <Link className="sha" to={`${base}/commit/${c.sha}`}>
+                        {shortSha(c.sha)}
+                      </Link>
+                      <span>{c.subject}</span>
+                      <span className="muted small">
+                        {c.authorName} · {timeAgo(c.date)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
             )}
-            {m.status === "closed" && (
-              <div className="row spread">
-                <p>This merge request is closed.</p>
-                <button className="secondary" disabled={busy} onClick={() => act("reopen")}>
-                  Reopen
-                </button>
-              </div>
-            )}
-            {m.status === "open" && (
-              <div className="stack">
-                {m.mergeable === null && <p className="muted">One of the branches is missing, so this can't be merged.</p>}
-                {m.mergeable === false && (
-                  <p className="error">
-                    These branches have conflicts. Resolve them on <code>{m.sourceBranch}</code> and push again.
-                  </p>
-                )}
-                {m.mergeable && m.commits.length === 0 && <p className="muted">There's nothing to merge.</p>}
-                {m.mergeable && m.commits.length > 0 && !pipelineBlocks && <p>Ready to merge.</p>}
-                {pipelineBlocks && (
-                  <p className="muted">
-                    This project requires a passing pipeline before merging
-                    {m.pipeline ? ` (the pipeline is ${m.pipeline.status === "manual" ? "waiting to run" : m.pipeline.status}).` : ", and this branch has none."}
-                  </p>
-                )}
-                <div className="row wrap">
-                  <button disabled={busy || !m.mergeable || m.commits.length === 0 || pipelineBlocks} onClick={() => act("merge", { deleteSourceBranch: deleteSource })}>
-                    Merge
-                  </button>
-                  <label className="checkbox">
-                    <input type="checkbox" checked={deleteSource} onChange={(e) => setDeleteSource(e.target.checked)} />
-                    Delete source branch
-                  </label>
-                  <div className="spacer" />
-                  <button className="secondary" disabled={busy} onClick={() => act("close")}>
-                    Close
-                  </button>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <MergeRequestComments mr={m} onPost={(body) => act("comments", { body })} />
-        </>
-      )}
-
-      {tab === "commits" && (
-        <section className="panel flush">
-          {m.commits.length === 0 ? (
-            <p className="muted pad">No commits.</p>
-          ) : (
-            <ul className="list">
-              {m.commits.map((c) => (
-                <li key={c.sha} className="list-row">
-                  <div>
-                    <Link to={`${base}/commit/${c.sha}`}>{c.subject}</Link>
-                    <div className="muted small">
-                      {c.authorName} committed {timeAgo(c.date)}
-                    </div>
-                  </div>
-                  <Link className="sha" to={`${base}/commit/${c.sha}`}>
-                    {shortSha(c.sha)}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          </div>
+          <DiffViewer
+            files={m.files}
+            comments={lineComments}
+            whitespaceHidden={hideWhitespace}
+            onToggleWhitespace={() => setHideWhitespace(!hideWhitespace)}
+            onComment={m.status === "open" ? (target: LineTarget, body: string) => act("comments", { body, ...target }) : undefined}
+          />
         </section>
-      )}
+        <ChecksPanel project={`${project.workspace}/${project.slug}`} pipeline={m.pipeline} onRun={m.pipeline ? () => act(`/api/projects/${project.workspace}/${project.slug}/pipelines/${m.pipeline!.id}/run`) : undefined} />
+      </div>
 
-      {tab === "changes" && (
-        <>
-          <p className="muted">
-            {m.files.length} {m.files.length === 1 ? "file" : "files"} changed, <span className="add">+{additions}</span>{" "}
-            <span className="del">−{deletions}</span>
-          </p>
-          {m.files.map((f, i) => (
-            <FileDiffView key={i} file={f} />
-          ))}
-        </>
-      )}
+      <Discussion comments={discussion} onPost={(body) => act("comments", { body })} />
     </>
   );
 }
 
-function MergeRequestComments({ mr, onPost }: { mr: MergeRequestDetail; onPost: (body: string) => Promise<void> }) {
+function Discussion({ comments, onPost }: { comments: MergeRequestDetail["comments"]; onPost: (body: string) => Promise<boolean> }) {
   const [draft, setDraft] = useState("");
   async function submit(e: FormEvent) {
     e.preventDefault();
-    await onPost(draft);
-    setDraft("");
+    if (await onPost(draft)) setDraft("");
   }
   return (
-    <>
-      <h2 className="section-title">
-        {mr.comments.length} {mr.comments.length === 1 ? "comment" : "comments"}
-      </h2>
-      {mr.comments.map((c) => (
-        <section className="panel comment" key={c.id}>
-          <div className="muted small">
-            <strong>{c.author.username}</strong> commented {timeAgo(c.createdAt)}
+    <section className="section">
+      <h2>Discussion</h2>
+      {comments.length === 0 && <p className="muted small">No comments yet. Comment on a line from the diff, or on the whole change here.</p>}
+      {comments.map((c) => (
+        <div className="line-thread" key={c.id}>
+          <div className="meta">
+            <Actor name={c.author.username} bot={c.author.kind === "bot"} />
+            <span>{timeAgo(c.createdAt)}</span>
           </div>
           <Markdown source={c.body} />
-        </section>
+        </div>
       ))}
       <form className="stack" onSubmit={submit}>
-        <MarkdownEditor value={draft} onChange={setDraft} rows={4} placeholder="Leave a comment" />
+        <MarkdownEditor value={draft} onChange={setDraft} rows={3} placeholder="Comment on the whole change" />
         <div>
-          <button type="submit" disabled={!draft.trim()}>
+          <button type="submit" className="secondary" disabled={!draft.trim()}>
             Comment
           </button>
         </div>
       </form>
-    </>
+    </section>
   );
 }
